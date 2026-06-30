@@ -71,7 +71,7 @@ fn parse_results(stdout: &[u8]) -> Vec<SearchResult> {
         let channel = if parts.len() > 3 && !parts[3].is_empty() { parts[3].to_string() } else { String::new() };
         let channel_id = if parts.len() > 4 && !parts[4].is_empty() { parts[4].to_string() } else { String::new() };
         results.push(SearchResult {
-            thumbnail: format!("https://img.youtube.com/vi/{}/mqdefault.jpg", id),
+            thumbnail: format!("https://img.youtube.com/vi/{}/0.jpg", id),
             channel_url: if channel_id.starts_with("UC") { format!("https://www.youtube.com/channel/{}", channel_id) } else { String::new() },
             id, title: parts[1].to_string(), duration: parts[2].to_string(), channel, channel_id,
         });
@@ -185,7 +185,7 @@ fn meta_default(id: &str) -> SongMeta {
     SongMeta {
         id: id.to_string(),
         title: id.to_string(),
-        thumbnail: format!("https://img.youtube.com/vi/{}/mqdefault.jpg", id),
+        thumbnail: format!("https://img.youtube.com/vi/{}/0.jpg", id),
         channel: String::new(),
         channel_id: String::new(),
         channel_url: String::new(),
@@ -233,12 +233,6 @@ async fn get_downloaded_songs(app: AppHandle) -> Result<Vec<DownloadedSong>, Str
 }
 
 #[tauri::command]
-async fn read_audio_base64(path: String) -> Result<String, String> {
-    let bytes = fs::read(&path).map_err(|e| format!("[Read Error] {}", e))?;
-    Ok(base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &bytes))
-}
-
-#[tauri::command]
 async fn delete_downloaded_song(app: AppHandle, video_id: String) -> Result<(), String> {
     let cache_dir = app.path().app_cache_dir()
         .map_err(|e| e.to_string())?
@@ -252,13 +246,13 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_fs::init())
         .invoke_handler(tauri::generate_handler![
             search_youtube,
             download_audio,
             get_channel_videos,
             get_downloaded_songs,
-            delete_downloaded_song,
-            read_audio_base64
+            delete_downloaded_song
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

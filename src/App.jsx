@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import "./App.css";
 
 function load(key, fallback) {
@@ -49,7 +49,6 @@ function App() {
 
   const audioRef = useRef(null);
   const queueRef = useRef([]);
-  const blobUrlRef = useRef(null);
 
   useEffect(() => { queueRef.current = queue; }, [queue]);
   useEffect(() => { save("shyqui_volume", volume); }, [volume]);
@@ -89,31 +88,15 @@ function App() {
     });
   }, []);
 
-  const loadAudioBlob = async (filePath) => {
-    if (blobUrlRef.current) { URL.revokeObjectURL(blobUrlRef.current); blobUrlRef.current = null; }
-    const b64 = await invoke("read_audio_base64", { path: filePath });
-    const binary = atob(b64);
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-    const blob = new Blob([bytes], { type: "audio/mpeg" });
-    const url = URL.createObjectURL(blob);
-    blobUrlRef.current = url;
-    return url;
-  };
-
   const playTrack = async (videoId, title, thumb) => {
     setLoading(true); setCurrentId(videoId);
     const cached = downloadedSongs.find((s) => s.id === videoId);
     if (cached) {
-      try {
-        const src = await loadAudioBlob(cached.file_path);
-        addLog("Playing cached: " + cached.file_path);
-        setCurrentTrack(src);
-        if (cached.title) setCurrentTitle(cached.title);
-        if (cached.thumbnail) setCurrentThumb(cached.thumbnail);
-      } catch (e) {
-        addLog("Blob error: " + e); setCurrentTrack(null); setCurrentId(null);
-      }
+      const src = convertFileSrc(cached.file_path);
+      addLog("Cached src: " + src);
+      setCurrentTrack(src);
+      if (cached.title) setCurrentTitle(cached.title);
+      if (cached.thumbnail) setCurrentThumb(cached.thumbnail);
       setLoading(false); return;
     }
     setDownloading((prev) => [...prev, videoId]);
@@ -121,8 +104,8 @@ function App() {
       const meta = results.find((r) => r.id === videoId) || history.find((r) => r.id === videoId) || queue.find((r) => r.id === videoId);
       const absolutePath = await invoke("download_audio", { videoId, meta });
       addLog("Downloaded to: " + absolutePath);
-      const src = await loadAudioBlob(absolutePath);
-      addLog("Audio blob URL: " + src);
+      const src = convertFileSrc(absolutePath);
+      addLog("Audio src: " + src);
       setCurrentTrack(src);
       if (title) setCurrentTitle(title); if (thumb) setCurrentThumb(thumb);
       loadDownloads();
