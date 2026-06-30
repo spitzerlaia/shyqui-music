@@ -1,0 +1,21 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "shyqui music app permissions.",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "shell:default",
+    "opener:default",
+    "core:path:default",
+    "core:event:default",
+    "core:webview:allow-create-webview",
+    {
+      "identifier": "shell:allow-execute",
+      "allow": [
+        { "sidecar": "binaries/yt-dlp" },
+        { "sidecar": "binaries/ffmpeg" }
+      ]
+    }
+  ]
+}
