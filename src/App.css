@@ -195,6 +195,12 @@ header {
 
 .search-box {
   display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.search-row {
+  display: flex;
   gap: 8px;
 }
 
@@ -265,6 +271,105 @@ header {
   cursor: not-allowed;
   transform: none;
   box-shadow: none;
+}
+
+/* ---- Source Selector ---- */
+.source-selector {
+  display: flex;
+  gap: 6px;
+  padding: 0 4px;
+}
+
+.source-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 12px;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 14px;
+  background: rgba(255,255,255,0.02);
+  color: rgba(255,255,255,0.35);
+  font-size: 0.7rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.source-btn:hover {
+  color: rgba(255,255,255,0.6);
+  border-color: rgba(255,255,255,0.15);
+}
+
+.source-btn.source-active {
+  border-color: rgba(255,255,255,0.2);
+  background: rgba(255,255,255,0.05);
+  color: #fff;
+}
+
+.source-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.source-youtube { background: #ff4444; box-shadow: 0 0 6px rgba(255,68,68,0.4); }
+.source-hinai { background: #ff66b2; box-shadow: 0 0 6px rgba(255,102,178,0.4); }
+
+/* ---- Filter Row ---- */
+.filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0 4px;
+}
+
+.filter-select {
+  padding: 5px 10px;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 10px;
+  background: rgba(255,255,255,0.04);
+  color: rgba(255,255,255,0.5);
+  font-size: 0.7rem;
+  font-weight: 500;
+  outline: none;
+  cursor: pointer;
+  min-width: 90px;
+  transition: border-color 0.2s;
+}
+
+.filter-select:hover, .filter-select:focus {
+  border-color: rgba(0,245,255,0.3);
+  color: #fff;
+}
+
+.filter-select option {
+  background: #1a1a2e;
+  color: #fff;
+}
+
+/* ---- Source Tags ---- */
+.source-tag {
+  display: inline-block;
+  font-size: 0.55rem;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 4px;
+  margin-right: 5px;
+  vertical-align: middle;
+  letter-spacing: 0.5px;
+}
+
+.source-tag-youtube {
+  background: rgba(255,68,68,0.2);
+  color: #ff6666;
+  border: 1px solid rgba(255,68,68,0.25);
+}
+
+.source-tag-hinai {
+  background: rgba(255,102,178,0.2);
+  color: #ff88c4;
+  border: 1px solid rgba(255,102,178,0.25);
 }
 
 /* ---- Loading Spinner ---- */
@@ -392,6 +497,11 @@ header {
   object-fit: cover;
   flex-shrink: 0;
   background: rgba(255,255,255,0.04);
+}
+
+.track-thumb-placeholder {
+  background: rgba(255,255,255,0.04);
+  flex-shrink: 0;
 }
 
 .track-info {

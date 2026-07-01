@@ -15,6 +15,7 @@ import "./App.css";
 
 function App() {
   const [query, setQuery] = useState("");
+  const [source, setSource] = useState("youtube");
   const [results, setResults] = useState([]);
   const [channels, setChannels] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -40,6 +41,7 @@ function App() {
   const [channelLoading, setChannelLoading] = useState(false);
   const [downloadedSongs, setDownloadedSongs] = useState([]);
   const [downloadFilter, setDownloadFilter] = useState("");
+  const [hinaiFilters, setHinaiFilters] = useState({ status: "", sort: "ranked_date_desc", genre: 0, language: 0 });
   const [showDebug, setShowDebug] = useState(false);
   const [logs, setLogs] = useState([]);
   const logRef = useRef([]);
@@ -59,8 +61,13 @@ function App() {
     if (!query) return;
     setLoading(true); setChannelView(null);
     try {
-      const [vids, chans] = await invoke("search_youtube", { query });
-      setResults(vids); setChannels(chans);
+      if (source === "hinai") {
+        const [vids, chans] = await invoke("search_hinai", { query, filters: hinaiFilters });
+        setResults(vids); setChannels(chans);
+      } else {
+        const [vids, chans] = await invoke("search_youtube", { query });
+        setResults(vids); setChannels(chans);
+      }
     } catch (err) { addLog("Search failed: " + err); }
     finally { setLoading(false); }
   };
@@ -81,7 +88,8 @@ function App() {
     });
   }, [setHistory]);
 
-  const playTrack = async (videoId, title, thumb) => {
+  const playTrack = async (item) => {
+    const { id: videoId, title, thumbnail, source: itemSource } = item;
     setLoading(true); setCurrentId(videoId);
     const cached = downloadedSongs.find((s) => s.id === videoId);
     if (cached) {
@@ -95,13 +103,18 @@ function App() {
     setDownloading((prev) => [...prev, videoId]);
     try {
       const found = results.find((r) => r.id === videoId) || history.find((r) => r.id === videoId) || queue.find((r) => r.id === videoId);
-      const meta = found ? { ...found, duration: String(found.duration ?? "") } : found;
-      const absolutePath = await invoke("download_audio", { videoId, meta });
+      const meta = found ? { ...found, duration: String(found.duration ?? "") } : null;
+      let absolutePath;
+      if ((itemSource || source) === "hinai") {
+        absolutePath = await invoke("download_hinai_audio", { beatmapId: videoId, meta });
+      } else {
+        absolutePath = await invoke("download_audio", { videoId, meta });
+      }
       addLog("Downloaded to: " + absolutePath);
       const src = convertFileSrc(absolutePath);
       addLog("Audio src: " + src);
       setCurrentTrack(src);
-      if (title) setCurrentTitle(title); if (thumb) setCurrentThumb(thumb);
+      if (title) setCurrentTitle(title); if (thumbnail) setCurrentThumb(thumbnail);
       loadDownloads();
     } catch (err) {
       addLog("Download error: " + err); setCurrentTrack(null); setCurrentId(null);
@@ -111,14 +124,14 @@ function App() {
   };
 
   const handlePlayItem = (item) => {
-    playTrack(item.id, item.title, item.thumbnail);
+    playTrack(item);
   };
 
   const prefetchNext = useCallback(async () => {}, []);
 
   const addToQueue = (item) => {
     if (!currentId && queueRef.current.length === 0) {
-      playTrack(item.id, item.title, item.thumbnail);
+      playTrack(item);
       return;
     }
     setQueue((prev) => [...prev, item]);
@@ -134,7 +147,7 @@ function App() {
     if (audioRef.current) { audioRef.current.pause(); audioRef.current.src = ""; }
     setQueue(q.filter((_, i) => i !== index));
     setCurrentTime(0); setDuration(0);
-    playTrack(item.id, item.title, item.thumbnail);
+    playTrack(item);
   };
 
   const playNext = useCallback(() => {
@@ -145,7 +158,7 @@ function App() {
       setCurrentTime(0); setDuration(0); return;
     }
     setLoading(true); const [next, ...rest] = q; setQueue(rest);
-    playTrack(next.id, next.title, next.thumbnail);
+    playTrack(next);
   }, []);
 
   const togglePlay = useCallback(() => {
@@ -182,7 +195,12 @@ function App() {
     if (downloadedSongs.some((s) => s.id === item.id)) return;
     setDownloading((prev) => [...prev, item.id]);
     try {
-      await invoke("download_audio", { videoId: item.id, meta: item });
+      const meta = item ? { ...item, duration: String(item.duration ?? "") } : null;
+      if ((item.source || source) === "hinai") {
+        await invoke("download_hinai_audio", { beatmapId: item.id, meta });
+      } else {
+        await invoke("download_audio", { videoId: item.id, meta });
+      }
       loadDownloads();
     } catch (e) { addLog("Download failed: " + e); }
     finally { setDownloading((prev) => prev.filter((id) => id !== item.id)); }
@@ -283,6 +301,10 @@ function App() {
             query={query}
             onQueryChange={setQuery}
             onSearch={handleSearch}
+            source={source}
+            onSourceChange={setSource}
+            hinaiFilters={hinaiFilters}
+            onHinaiFiltersChange={setHinaiFilters}
             loading={loading}
             results={results}
             channels={channels}

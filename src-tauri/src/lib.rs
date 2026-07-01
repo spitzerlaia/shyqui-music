@@ -1,4 +1,5 @@
 use std::fs;
+use std::io::{Cursor, Read};
 use std::path::Path;
 use std::time::{SystemTime, Duration};
 use tauri::{AppHandle, Manager};
@@ -16,6 +17,7 @@ pub struct SearchResult {
     pub channel: String,
     pub channel_id: String,
     pub channel_url: String,
+    pub source: String,
 }
 
 #[derive(Serialize)]
@@ -39,6 +41,8 @@ pub struct SongMeta {
     pub channel_url: String,
     #[serde(default)]
     pub duration: String,
+    #[serde(default)]
+    pub source: String,
 }
 
 fn purge_stale_cache(cache_path: &Path) -> std::io::Result<()> {
@@ -74,6 +78,7 @@ fn parse_results(stdout: &[u8]) -> Vec<SearchResult> {
             thumbnail: format!("https://img.youtube.com/vi/{}/0.jpg", id),
             channel_url: if channel_id.starts_with("UC") { format!("https://www.youtube.com/channel/{}", channel_id) } else { String::new() },
             id, title: parts[1].to_string(), duration: parts[2].to_string(), channel, channel_id,
+            source: "youtube".to_string(),
         });
     }
     results
@@ -110,6 +115,111 @@ async fn search_youtube(app: AppHandle, query: String) -> Result<(Vec<SearchResu
     let results = parse_results(&output.stdout);
     let channels = extract_channels(&results);
     Ok((results, channels))
+}
+
+#[derive(Deserialize)]
+struct HinaiFilters {
+    #[serde(default)]
+    status: Option<String>,
+    #[serde(default)]
+    sort: Option<String>,
+    #[serde(default)]
+    genre: Option<i64>,
+    #[serde(default)]
+    language: Option<i64>,
+    #[serde(default)]
+    page: Option<i64>,
+}
+
+#[tauri::command]
+async fn search_hinai(query: String, filters: Option<HinaiFilters>) -> Result<(Vec<SearchResult>, Vec<ChannelInfo>), String> {
+    let client = reqwest::Client::builder()
+        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+        .build()
+        .map_err(|e| format!("[Hinai Client Error] {}", e))?;
+
+    let mut url = format!("https://catboy.best/api/v2/search?q={}&limit=50", query);
+
+    if let Some(f) = filters {
+        if let Some(status) = f.status {
+            if !status.is_empty() {
+                url.push_str(&format!("&status={}", status));
+            }
+        }
+        if let Some(sort) = f.sort {
+            if !sort.is_empty() {
+                url.push_str(&format!("&sort={}", sort));
+            }
+        }
+        if let Some(genre) = f.genre {
+            if genre > 0 {
+                url.push_str(&format!("&genre={}", genre));
+            }
+        }
+        if let Some(language) = f.language {
+            if language > 0 {
+                url.push_str(&format!("&language={}", language));
+            }
+        }
+        if let Some(page) = f.page {
+            url.push_str(&format!("&page={}", page));
+        }
+    }
+
+    let resp = client.get(&url)
+        .send()
+        .await
+        .map_err(|e| format!("[Hinai Search Error] {}", e))?;
+
+    if resp.status().is_client_error() || resp.status().is_server_error() {
+        let status = resp.status();
+        let body = resp.text().await.unwrap_or_default();
+        return Err(format!("[Hinai API Error] {} - {}", status, body));
+    }
+
+    let raw: Vec<serde_json::Value> = resp.json().await
+        .map_err(|e| format!("[Hinai Parse Error] {}", e))?;
+
+    let mut results = Vec::new();
+    for item in raw.iter() {
+        let set_id = item.get("id")
+            .and_then(|v| v.as_i64().or_else(|| v.as_str().and_then(|s| s.parse().ok())))
+            .unwrap_or(0);
+
+        let artist = item.get("artist")
+            .and_then(|v| v.as_str())
+            .unwrap_or("Unknown");
+
+        let title = item.get("title")
+            .and_then(|v| v.as_str())
+            .unwrap_or("Unknown");
+
+        let creator = item.get("creator").and_then(|v| v.as_str()).unwrap_or("");
+
+        let duration_secs = item.get("beatmaps")
+            .and_then(|v| v.as_array())
+            .and_then(|arr| arr.first())
+            .and_then(|bm| bm.get("total_length").or_else(|| bm.get("TotalLength")))
+            .and_then(|v| v.as_i64().or_else(|| v.as_str().and_then(|s| s.parse().ok())))
+            .unwrap_or(0);
+
+        let mins = duration_secs / 60;
+        let secs = duration_secs % 60;
+        let duration_str = format!("{:02}:{:02}", mins, secs);
+
+        results.push(SearchResult {
+            id: set_id.to_string(),
+            title: format!("{} - {} ({})", artist, title, creator),
+            duration: duration_str,
+            thumbnail: format!("https://assets.ppy.sh/beatmaps/{}/covers/cover.jpg", set_id),
+            channel: artist.to_string(),
+            channel_id: String::new(),
+            channel_url: String::new(),
+            source: "hinai".to_string(),
+        });
+    }
+
+    Ok((results, Vec::new()))
 }
 
 #[tauri::command]
@@ -168,6 +278,92 @@ async fn download_audio(app: AppHandle, video_id: String, meta: Option<SongMeta>
     }
 }
 
+#[tauri::command]
+async fn download_hinai_audio(app: AppHandle, beatmap_id: String, meta: Option<SongMeta>) -> Result<String, String> {
+    let cache_dir = app.path().app_cache_dir()
+        .map_err(|e| e.to_string())?
+        .join("tracks");
+
+    fs::create_dir_all(&cache_dir).map_err(|e| e.to_string())?;
+    let _ = purge_stale_cache(&cache_dir);
+
+    let file_path = cache_dir.join(format!("{}.mp3", beatmap_id));
+
+    if file_path.exists() {
+        return Ok(file_path.to_string_lossy().to_string());
+    }
+
+    let client = reqwest::Client::builder()
+        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+        .build()
+        .map_err(|e| format!("[Hinai Client Error] {}", e))?;
+
+    // Step 1: query the mirror API to get the real download URL
+    let mirror_url = format!("https://mirror.hinamizawa.ai/d/{}", beatmap_id);
+    let resp = client.get(&mirror_url)
+        .send()
+        .await
+        .map_err(|e| format!("[Hinai Mirror Error] {}", e))?;
+    if resp.status().is_client_error() || resp.status().is_server_error() {
+        let status = resp.status();
+        let body = resp.text().await.unwrap_or_default();
+        return Err(format!("[Hinai Mirror Error] {} - {}", status, body));
+    }
+    let mirror_json: serde_json::Value = resp.json().await
+        .map_err(|e| format!("[Hinai Mirror Parse Error] {}", e))?;
+    let real_url = mirror_json.get("download_url")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| "[Hinai Error] No download_url in mirror response".to_string())?;
+
+    // Step 2: download the actual .osz file
+    let resp = client.get(real_url)
+        .send()
+        .await
+        .map_err(|e| format!("[Hinai Download Error] {}", e))?;
+    if resp.status().is_client_error() || resp.status().is_server_error() {
+        let status = resp.status();
+        let body = resp.text().await.unwrap_or_default();
+        return Err(format!("[Hinai Download Error] {} - {}", status, body));
+    }
+
+    let bytes = resp.bytes()
+        .await
+        .map_err(|e| format!("[Hinai Read Error] {}", e))?
+        .to_vec();
+
+    let cursor = Cursor::new(bytes);
+    let mut archive = zip::ZipArchive::new(cursor)
+        .map_err(|e| format!("[Zip Error] {}", e))?;
+
+    let mut audio_data: Option<Vec<u8>> = None;
+
+    for i in 0..archive.len() {
+        let mut file = archive.by_index(i)
+            .map_err(|e| format!("[Zip Read Error] {}", e))?;
+        let name = file.name().to_lowercase();
+        if name.ends_with(".mp3") || name.ends_with(".ogg") {
+            let mut buf = Vec::new();
+            file.read_to_end(&mut buf)
+                .map_err(|e| format!("[Audio Read Error] {}", e))?;
+            audio_data = Some(buf);
+            break;
+        }
+    }
+
+    match audio_data {
+        Some(data) => {
+            fs::write(&file_path, &data).map_err(|e| e.to_string())?;
+            if let Some(m) = meta {
+                let meta_path = cache_dir.join(format!("{}.json", beatmap_id));
+                let json = serde_json::to_string(&m).map_err(|e| e.to_string())?;
+                let _ = fs::write(&meta_path, json);
+            }
+            Ok(file_path.to_string_lossy().to_string())
+        }
+        None => Err("No audio file found in beatmap".to_string()),
+    }
+}
+
 #[derive(Serialize)]
 pub struct DownloadedSong {
     pub id: String,
@@ -179,6 +375,7 @@ pub struct DownloadedSong {
     pub duration: String,
     pub size: u64,
     pub file_path: String,
+    pub source: String,
 }
 
 fn meta_default(id: &str) -> SongMeta {
@@ -190,6 +387,7 @@ fn meta_default(id: &str) -> SongMeta {
         channel_id: String::new(),
         channel_url: String::new(),
         duration: String::new(),
+        source: String::new(),
     }
 }
 
@@ -226,6 +424,7 @@ async fn get_downloaded_songs(app: AppHandle) -> Result<Vec<DownloadedSong>, Str
                 channel_id: m.channel_id,
                 channel_url: m.channel_url,
                 duration: m.duration,
+                source: m.source,
             });
         }
     }
@@ -249,7 +448,9 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .invoke_handler(tauri::generate_handler![
             search_youtube,
+            search_hinai,
             download_audio,
+            download_hinai_audio,
             get_channel_videos,
             get_downloaded_songs,
             delete_downloaded_song

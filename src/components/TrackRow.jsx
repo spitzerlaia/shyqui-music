@@ -30,9 +30,10 @@ export default function TrackRow({
   return (
     <div className={classes.join(" ")} style={onRowClick && !isCurrent ? { cursor: "pointer" } : undefined}
       onClick={!isCurrent && onRowClick ? () => onRowClick() : undefined}>
-      <img className="track-thumb" src={item.thumbnail} alt="" loading="lazy" />
+      {item.thumbnail ? <img className="track-thumb" src={item.thumbnail} alt="" loading="lazy" /> : <div className="track-thumb track-thumb-placeholder" />}
       <div className="track-info">
         <div className="track-title">
+          {item.source && <span className={`source-tag source-tag-${item.source}`}>{item.source === "youtube" ? "YT" : "HN"}</span>}
           {item.title}
           {isCurrent && <span className="now-playing-badge">Now Playing</span>}
         </div>

@@ -8,6 +8,10 @@ export default function SearchView({
   query,
   onQueryChange,
   onSearch,
+  source,
+  onSourceChange,
+  hinaiFilters,
+  onHinaiFiltersChange,
   loading,
   results,
   channels,
@@ -39,7 +43,7 @@ export default function SearchView({
   return (
     <>
       {!channelView && (
-        <SearchBox value={query} onChange={onQueryChange} onSubmit={onSearch} loading={loading} />
+        <SearchBox value={query} onChange={onQueryChange} onSubmit={onSearch} loading={loading} source={source} onSourceChange={onSourceChange} hinaiFilters={hinaiFilters} onHinaiFiltersChange={onHinaiFiltersChange} />
       )}
 
       {channelView && (
