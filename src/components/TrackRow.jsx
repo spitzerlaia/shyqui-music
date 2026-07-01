@@ -1,0 +1,81 @@
+import { formatTime } from "../utils/helpers";
+import SaveDropdown from "./SaveDropdown";
+
+export default function TrackRow({
+  item,
+  showSave,
+  showRemove,
+  showPlay = true,
+  showQueue,
+  showDownload,
+  isQueued,
+  isDownloading,
+  isDownloaded,
+  saveOpen,
+  playlists,
+  currentId,
+  isCurrent,
+  onPlay,
+  onQueue,
+  onDownload,
+  onSaveToggle,
+  onAddToPlaylist,
+  onRemove,
+  onRowClick,
+}) {
+  const classes = ["track-item"];
+  if (onRowClick) classes.push("queue-item");
+  if (isCurrent) classes.push("track-item-current");
+
+  return (
+    <div className={classes.join(" ")} style={onRowClick && !isCurrent ? { cursor: "pointer" } : undefined}
+      onClick={!isCurrent && onRowClick ? () => onRowClick() : undefined}>
+      <img className="track-thumb" src={item.thumbnail} alt="" loading="lazy" />
+      <div className="track-info">
+        <div className="track-title">
+          {item.title}
+          {isCurrent && <span className="now-playing-badge">Now Playing</span>}
+        </div>
+        {item.channel && <div className="track-channel">{item.channel}</div>}
+        {isDownloading && (
+          <div className="downloading-indicator">
+            Downloading<span className="dl-dots"><span>.</span><span>.</span><span>.</span></span>
+          </div>
+        )}
+        {isDownloaded && !isDownloading && <div className="downloaded-badge">Cached</div>}
+      </div>
+      <span className="track-duration">
+        {item.duration != null
+          ? (typeof item.duration === "string" && item.duration.includes(":") ? item.duration : formatTime(Number(item.duration)))
+          : ""}
+      </span>
+      {!isCurrent && showSave && (
+        <div className="save-wrapper">
+          <button className="btn-save" onClick={() => onSaveToggle(item.id)} disabled={isDownloading}>
+            💾
+          </button>
+          {saveOpen === item.id && (
+            <SaveDropdown playlists={playlists} onAddToPlaylist={onAddToPlaylist} item={item} />
+          )}
+        </div>
+      )}
+      {!isCurrent && showQueue && (
+        <button className="btn-queue" onClick={() => onQueue(item)} disabled={isQueued || isDownloading || item.id === currentId}>
+          <span>{item.id === currentId ? "Playing" : isQueued ? "Queued" : "+"}</span>
+        </button>
+      )}
+      {!isCurrent && showDownload && !isDownloaded && (
+        <button className="btn-download" onClick={() => onDownload(item)} disabled={isDownloading}>
+          <span>{isDownloading ? "..." : "DL"}</span>
+        </button>
+      )}
+      {!isCurrent && isDownloaded && !isDownloading && <span className="dl-check">📥</span>}
+      {!isCurrent && showRemove && <button className="btn-remove-sm" onClick={onRemove}><span>Remove</span></button>}
+      {!isCurrent && showPlay && (
+        <button className="btn-play" onClick={() => onPlay(item)} disabled={isDownloading}>
+          <span>{isDownloading ? "DL" : item.id === currentId ? "Now Playing" : "Play"}</span>
+        </button>
+      )}
+    </div>
+  );
+}
