@@ -51,7 +51,7 @@ export default function TrackRow({
       </span>
       {!isCurrent && showSave && (
         <div className="save-wrapper">
-          <button className="btn-save" onClick={() => onSaveToggle(item.id)} disabled={isDownloading}>
+          <button className="btn-save" onClick={(e) => { e.stopPropagation(); onSaveToggle(item.id); }} disabled={isDownloading}>
             💾
           </button>
           {saveOpen === item.id && (
@@ -60,19 +60,19 @@ export default function TrackRow({
         </div>
       )}
       {!isCurrent && showQueue && (
-        <button className="btn-queue" onClick={() => onQueue(item)} disabled={isQueued || isDownloading || item.id === currentId}>
+        <button className="btn-queue" onClick={(e) => { e.stopPropagation(); onQueue(item); }} disabled={isQueued || isDownloading || item.id === currentId}>
           <span>{item.id === currentId ? "Playing" : isQueued ? "Queued" : "+"}</span>
         </button>
       )}
       {!isCurrent && showDownload && !isDownloaded && (
-        <button className="btn-download" onClick={() => onDownload(item)} disabled={isDownloading}>
+        <button className="btn-download" onClick={(e) => { e.stopPropagation(); onDownload(item); }} disabled={isDownloading}>
           <span>{isDownloading ? "..." : "DL"}</span>
         </button>
       )}
       {!isCurrent && isDownloaded && !isDownloading && <span className="dl-check">📥</span>}
-      {!isCurrent && showRemove && <button className="btn-remove-sm" onClick={onRemove}><span>Remove</span></button>}
+      {!isCurrent && showRemove && <button className="btn-remove-sm" onClick={(e) => { e.stopPropagation(); onRemove(); }}><span>Remove</span></button>}
       {!isCurrent && showPlay && (
-        <button className="btn-play" onClick={() => onPlay(item)} disabled={isDownloading}>
+        <button className="btn-play" onClick={(e) => { e.stopPropagation(); onPlay(item); }} disabled={isDownloading}>
           <span>{isDownloading ? "DL" : item.id === currentId ? "Now Playing" : "Play"}</span>
         </button>
       )}
