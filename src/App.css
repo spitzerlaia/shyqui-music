@@ -348,6 +348,29 @@ header {
   opacity: 1;
 }
 
+.track-item-current {
+  background: rgba(0, 60, 120, 0.2) !important;
+  border: 1px solid rgba(0, 100, 200, 0.25);
+  border-radius: 8px;
+  margin: 4px 0;
+  pointer-events: none;
+}
+
+.track-item-current .track-title {
+  color: #6bf;
+}
+
+.now-playing-badge {
+  display: inline-block;
+  font-size: 0.6rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #6bf;
+  margin-left: 8px;
+  vertical-align: middle;
+}
+
 .track-item {
   display: flex;
   align-items: center;
