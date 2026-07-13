@@ -2,7 +2,6 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import { genId } from "./utils/helpers";
 import { useLocalStorage } from "./hooks/useLocalStorage";
-import Header from "./components/Header";
 import NavTabs from "./components/NavTabs";
 import SettingsPanel from "./components/SettingsPanel";
 import Player from "./components/Player";
@@ -10,6 +9,7 @@ import DebugPanel from "./components/DebugPanel";
 import SearchView from "./views/SearchView";
 import QueueView from "./views/QueueView";
 import PlaylistsView from "./views/PlaylistsView";
+import HistoryView from "./views/HistoryView";
 import DownloadsView from "./views/DownloadsView";
 import "./App.css";
 
@@ -24,11 +24,13 @@ function App() {
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [volume, setVolume] = useLocalStorage("shyqui_volume", 0.7);
-  const [currentId, setCurrentId] = useState(null);
-  const [currentTitle, setCurrentTitle] = useState("");
-  const [currentThumb, setCurrentThumb] = useState("");
-  const [queue, setQueue] = useState([]);
+  const [currentId, setCurrentId] = useLocalStorage("shyqui_current_id", null);
+  const [currentTitle, setCurrentTitle] = useLocalStorage("shyqui_current_title", "");
+  const [currentThumb, setCurrentThumb] = useLocalStorage("shyqui_current_thumb", "");
+  const [queue, setQueue] = useLocalStorage("shyqui_queue", []);
+  const [queueIdx, setQueueIdx] = useLocalStorage("shyqui_queue_idx", -1);
   const [history, setHistory] = useLocalStorage("shyqui_history", []);
+  const [keptIds, setKeptIds] = useLocalStorage("shyqui_kept_ids", []);
   const [downloading, setDownloading] = useState([]);
   const [showSettings, setShowSettings] = useState(false);
   const [playlists, setPlaylists] = useLocalStorage("shyqui_playlists", []);
@@ -54,14 +56,20 @@ function App() {
 
   const audioRef = useRef(null);
   const queueRef = useRef([]);
+  const queueIdxRef = useRef(-1);
 
   useEffect(() => { queueRef.current = queue; }, [queue]);
+  useEffect(() => { queueIdxRef.current = queueIdx; }, [queueIdx]);
 
   const handleSearch = async () => {
     if (!query) return;
     setLoading(true); setChannelView(null);
     try {
-      if (source === "hinai") {
+      const isUrl = query.startsWith("http://") || query.startsWith("https://");
+      if (isUrl) {
+        const vids = await invoke("fetch_url", { url: query });
+        setResults(vids); setChannels([]);
+      } else if (source === "hinai") {
         const [vids, chans] = await invoke("search_hinai", { query, filters: hinaiFilters });
         setResults(vids); setChannels(chans);
       } else {
@@ -132,20 +140,52 @@ function App() {
   const addToQueue = (item) => {
     if (!currentId && queueRef.current.length === 0) {
       playTrack(item);
+      setQueue([item]);
+      setQueueIdx(0);
       return;
     }
     setQueue((prev) => [...prev, item]);
     downloadTrack(item);
   };
 
-  const removeFromQueue = (index) => { setQueue((prev) => prev.filter((_, i) => i !== index)); };
+  const removeFromQueue = (index) => {
+    const q = queueRef.current;
+    const removed = q[index];
+    setQueue((prev) => prev.filter((_, i) => i !== index));
+    setQueueIdx((prev) => {
+      if (prev < 0) return prev;
+      if (index < prev) return prev - 1;
+      if (index === prev) return -1;
+      return prev;
+    });
+    if (removed && !keptIds.includes(removed.id)) {
+      invoke("delete_downloaded_song", { videoId: removed.id })
+        .then(() => setDownloadedSongs((prev) => prev.filter((s) => s.id !== removed.id)))
+        .catch((e) => addLog("Auto-cleanup error: " + e));
+    }
+  };
+  const moveQueueItem = (fromIndex, toIndex) => {
+    setQueue((prev) => {
+      const next = [...prev];
+      const [moved] = next.splice(fromIndex, 1);
+      next.splice(toIndex, 0, moved);
+      return next;
+    });
+    setQueueIdx((prev) => {
+      if (prev < 0) return prev;
+      if (prev === fromIndex) return toIndex;
+      if (fromIndex < prev && prev <= toIndex) return prev - 1;
+      if (toIndex <= prev && prev < fromIndex) return prev + 1;
+      return prev;
+    });
+  };
 
   const playFromQueue = (index) => {
     const q = queueRef.current;
     if (index < 0 || index >= q.length) return;
     const item = q[index];
     if (audioRef.current) { audioRef.current.pause(); audioRef.current.src = ""; }
-    setQueue(q.filter((_, i) => i !== index));
+    setQueueIdx(index);
     setCurrentTime(0); setDuration(0);
     playTrack(item);
   };
@@ -153,12 +193,14 @@ function App() {
   const playNext = useCallback(() => {
     if (audioRef.current) { audioRef.current.pause(); audioRef.current.src = ""; }
     const q = queueRef.current;
-    if (q.length === 0) {
+    const nextIdx = queueIdxRef.current + 1;
+    if (nextIdx < 0 || nextIdx >= q.length) {
       setCurrentTrack(null); setCurrentId(null); setCurrentTitle(""); setCurrentThumb("");
       setCurrentTime(0); setDuration(0); return;
     }
-    setLoading(true); const [next, ...rest] = q; setQueue(rest);
-    playTrack(next);
+    setQueueIdx(nextIdx);
+    setLoading(true);
+    playTrack(q[nextIdx]);
   }, []);
 
   const togglePlay = useCallback(() => {
@@ -171,13 +213,23 @@ function App() {
     if (audioRef.current) { setDuration(audioRef.current.duration); setCurrentTime(0); audioRef.current.play().catch(() => {}); }
   };
   const handleEnded = () => {
+    const finishedId = currentId;
+    const wasFromQueue = queueIdxRef.current >= 0;
     addHistory(currentId, currentTitle, currentThumb, duration); setPlaying(false); setCurrentTime(0); playNext();
+    if (finishedId && !wasFromQueue && !keptIds.includes(finishedId)) {
+      invoke("delete_downloaded_song", { videoId: finishedId })
+        .then(() => setDownloadedSongs((prev) => prev.filter((s) => s.id !== finishedId)))
+        .catch((e) => addLog("Auto-cleanup error: " + e));
+    }
   };
   const seek = (e) => { if (audioRef.current) { audioRef.current.currentTime = e.target.value; setCurrentTime(e.target.value); } };
   const changeVolume = (v) => { setVolume(v); if (audioRef.current) audioRef.current.volume = v; };
   const clearHistory = () => setHistory([]);
+  const removeHistoryItem = (index) => {
+    setHistory((prev) => prev.filter((_, i) => i !== index));
+  };
 
-  useEffect(() => { loadDownloads(); }, []);
+  useEffect(() => { reconcileDownloads(); }, []);
   useEffect(() => { if (audioRef.current) audioRef.current.volume = volume; }, [volume]);
   useEffect(() => {
     const el = audioRef.current; if (!el) return;
@@ -189,6 +241,20 @@ function App() {
   const loadDownloads = async () => {
     try { setDownloadedSongs(await invoke("get_downloaded_songs")); }
     catch (e) { addLog("Failed to load downloads: " + e); }
+  };
+
+  const reconcileDownloads = async () => {
+    try {
+      const all = await invoke("get_downloaded_songs");
+      const playlistIds = new Set(playlists.flatMap((p) => p.tracks.map((t) => t.id)));
+      const toDelete = all.filter((s) => !keptIds.includes(s.id) && !playlistIds.has(s.id));
+      for (const s of toDelete) {
+        await invoke("delete_downloaded_song", { videoId: s.id }).catch(() => {});
+      }
+      if (toDelete.length > 0) addLog(`Cleaned up ${toDelete.length} non-kept downloads`);
+      const kept = new Set([...keptIds, ...playlistIds]);
+      setDownloadedSongs(all.filter((s) => kept.has(s.id)));
+    } catch (e) { addLog("Reconcile error: " + e); }
   };
 
   const downloadTrack = async (item) => {
@@ -204,6 +270,11 @@ function App() {
       loadDownloads();
     } catch (e) { addLog("Download failed: " + e); }
     finally { setDownloading((prev) => prev.filter((id) => id !== item.id)); }
+  };
+
+  const keepDownload = (item) => {
+    setKeptIds((prev) => prev.includes(item.id) ? prev : [...prev, item.id]);
+    downloadTrack(item);
   };
 
   const deleteDownload = async (videoId) => {
@@ -228,8 +299,26 @@ function App() {
     )); setSaveOpen(null);
     downloadTrack(track);
   };
+  const importPlaylistUrl = async (playlistId, url) => {
+    try {
+      const tracks = await invoke("fetch_url", { url });
+      tracks.forEach((track) => addToPlaylist(playlistId, track));
+      addLog(`Imported ${tracks.length} tracks from URL`);
+    } catch (err) {
+      addLog("Import failed: " + err);
+    }
+  };
   const removeFromPlaylist = (playlistId, trackIndex) => {
     setPlaylists((prev) => prev.map((p) => p.id === playlistId ? { ...p, tracks: p.tracks.filter((_, i) => i !== trackIndex) } : p));
+  };
+  const movePlaylistTrack = (playlistId, fromIndex, toIndex) => {
+    setPlaylists((prev) => prev.map((p) => {
+      if (p.id !== playlistId) return p;
+      const next = [...p.tracks];
+      const [moved] = next.splice(fromIndex, 1);
+      next.splice(toIndex, 0, moved);
+      return { ...p, tracks: next };
+    }));
   };
 
   const handleViewChange = (view) => {
@@ -239,8 +328,17 @@ function App() {
     if (view === "downloads") loadDownloads();
   };
 
-  const skipBack5 = () => {
-    if (audioRef.current) audioRef.current.currentTime -= 5;
+  const playPrevious = () => {
+    const q = queueRef.current;
+    const prevIdx = queueIdxRef.current - 1;
+    if (prevIdx >= 0 && prevIdx < q.length) {
+      if (audioRef.current) { audioRef.current.pause(); audioRef.current.src = ""; }
+      setQueueIdx(prevIdx);
+      setCurrentTime(0); setDuration(0);
+      playTrack(q[prevIdx]);
+    } else {
+      if (audioRef.current) audioRef.current.currentTime = 0;
+    }
   };
 
   const clearDebug = () => {
@@ -251,7 +349,26 @@ function App() {
   const renderContent = () => {
     switch (activeView) {
       case "queue":
-        return <QueueView queue={queue} currentId={currentId} currentTitle={currentTitle} currentThumb={currentThumb} currentTime={currentTime} duration={duration} onPlayFromQueue={playFromQueue} onRemoveFromQueue={removeFromQueue} />;
+        return <QueueView queue={queue} queueIdx={queueIdx} currentId={currentId} currentTitle={currentTitle} currentThumb={currentThumb} currentTime={currentTime} duration={duration} onPlayFromQueue={playFromQueue} onRemoveFromQueue={removeFromQueue} onMoveQueueItem={moveQueueItem} />;
+      case "history":
+        return (
+          <HistoryView
+            history={history}
+            onClearHistory={clearHistory}
+            onRemoveFromHistory={removeHistoryItem}
+            queue={queue}
+            downloadedSongs={downloadedSongs}
+            downloading={downloading}
+            saveOpen={saveOpen}
+            onSaveToggle={setSaveOpen}
+            playlists={playlists}
+            onAddToPlaylist={addToPlaylist}
+            currentId={currentId}
+            onPlay={handlePlayItem}
+            onQueue={addToQueue}
+            onDownload={keepDownload}
+          />
+        );
       case "playlists":
         return (
           <PlaylistsView
@@ -275,9 +392,11 @@ function App() {
             onSaveToggle={setSaveOpen}
             onPlay={handlePlayItem}
             onQueue={addToQueue}
-            onDownload={downloadTrack}
+            onDownload={keepDownload}
             onAddToPlaylist={addToPlaylist}
             onRemoveFromPlaylist={removeFromPlaylist}
+            onImportPlaylistUrl={importPlaylistUrl}
+            onMovePlaylistTrack={movePlaylistTrack}
           />
         );
       case "downloads":
@@ -286,7 +405,7 @@ function App() {
             downloadedSongs={downloadedSongs}
             downloadFilter={downloadFilter}
             onFilterChange={setDownloadFilter}
-            onRefresh={loadDownloads}
+            onRefresh={reconcileDownloads}
             onClearFilter={() => setDownloadFilter("")}
             currentId={currentId}
             queue={queue}
@@ -314,8 +433,6 @@ function App() {
             onOpenChannel={openChannel}
             onBackFromChannel={() => { setChannelView(null); setChannelVideos([]); }}
             queue={queue}
-            history={history}
-            onClearHistory={clearHistory}
             downloadedSongs={downloadedSongs}
             downloading={downloading}
             saveOpen={saveOpen}
@@ -323,42 +440,40 @@ function App() {
             playlists={playlists}
             onAddToPlaylist={addToPlaylist}
             currentId={currentId}
-            currentTitle={currentTitle}
-            currentThumb={currentThumb}
-            currentTime={currentTime}
-            duration={duration}
             onPlay={handlePlayItem}
             onQueue={addToQueue}
-            onDownload={downloadTrack}
-            onPlayFromQueue={playFromQueue}
-            onRemoveFromQueue={removeFromQueue}
+            onDownload={keepDownload}
           />
         );
     }
   };
 
   return (
-    <div className="container">
-      <Header
-        showDebug={showDebug}
-        showSettings={showSettings}
-        onToggleDebug={() => setShowDebug(!showDebug)}
-        onToggleSettings={() => setShowSettings(!showSettings)}
-      />
-      <NavTabs
-        activeView={activeView}
-        onViewChange={handleViewChange}
-        counts={{ queue: queue.length, playlists: playlists.length, downloads: downloadedSongs.length }}
-      />
-      {showSettings && (
-        <SettingsPanel volume={volume} onChangeVolume={changeVolume} />
-      )}
+    <div className="app-layout">
+      <aside className="sidebar">
+        <div className="sidebar-logo">shyqui-music</div>
+        <NavTabs
+          activeView={activeView}
+          onViewChange={handleViewChange}
+          counts={{ queue: queue.length, history: history.length, playlists: playlists.length, downloads: downloadedSongs.length }}
+        />
+        <div className="sidebar-footer">
+          <button className={`sidebar-tool-btn ${showDebug ? "active" : ""}`} onClick={() => setShowDebug(!showDebug)}>🐛</button>
+          <button className={`sidebar-tool-btn ${showSettings ? "active" : ""}`} onClick={() => setShowSettings(!showSettings)}>⚙</button>
+        </div>
+      </aside>
 
-      {loading && !currentTrack && <div className="loading"><div className="spinner" /></div>}
+      <main className="main-area">
+        {showSettings && (
+          <SettingsPanel volume={volume} onChangeVolume={changeVolume} />
+        )}
 
-      <section className="results" key={activeView + (selectedPlaylist || "") + (channelView?.id || "")}>
-        {renderContent()}
-      </section>
+        {loading && !currentTrack && <div className="loading"><div className="spinner" /></div>}
+
+        <div className="content-scroll" key={activeView + (selectedPlaylist || "") + (channelView?.id || "")}>
+          {renderContent()}
+        </div>
+      </main>
 
       <audio ref={audioRef} src={currentTrack}
         onTimeUpdate={handleTimeUpdate}
@@ -376,11 +491,11 @@ function App() {
         currentTime={currentTime}
         duration={duration}
         volume={volume}
-        queueLength={queue.length}
+        queueLength={queueIdx >= 0 ? Math.max(0, queue.length - queueIdx - 1) : queue.length}
         onTogglePlay={togglePlay}
         onSeek={seek}
         onChangeVolume={changeVolume}
-        onPrev={skipBack5}
+        onPrev={playPrevious}
         onNext={playNext}
       />
 
@@ -390,3 +505,5 @@ function App() {
 }
 
 export default App;
+
+

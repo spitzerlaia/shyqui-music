@@ -8,6 +8,7 @@ export default function TrackRow({
   showPlay = true,
   showQueue,
   showDownload,
+  showDragHandle,
   isQueued,
   isDownloading,
   isDownloaded,
@@ -22,14 +23,21 @@ export default function TrackRow({
   onAddToPlaylist,
   onRemove,
   onRowClick,
+  onDragHandleMouseDown,
 }) {
   const classes = ["track-item"];
-  if (onRowClick) classes.push("queue-item");
+  if (showDragHandle || onRowClick) classes.push("queue-item");
   if (isCurrent) classes.push("track-item-current");
 
   return (
-    <div className={classes.join(" ")} style={onRowClick && !isCurrent ? { cursor: "pointer" } : undefined}
+    <div className={classes.join(" ")}
+      style={onRowClick && !isCurrent ? { cursor: "pointer" } : undefined}
       onClick={!isCurrent && onRowClick ? () => onRowClick() : undefined}>
+      {showDragHandle && (
+        <div className="drag-handle" onMouseDown={(e) => { e.stopPropagation(); onDragHandleMouseDown?.(e); }}>
+          <span>≡</span>
+        </div>
+      )}
       {item.thumbnail ? <img className="track-thumb" src={item.thumbnail} alt="" loading="lazy" /> : <div className="track-thumb track-thumb-placeholder" />}
       <div className="track-info">
         <div className="track-title">
@@ -71,7 +79,7 @@ export default function TrackRow({
         </button>
       )}
       {!isCurrent && isDownloaded && !isDownloading && <span className="dl-check">📥</span>}
-      {!isCurrent && showRemove && <button className="btn-remove-sm" onClick={(e) => { e.stopPropagation(); onRemove(); }}><span>Remove</span></button>}
+      {showRemove && <button className="btn-remove-sm" onClick={(e) => { e.stopPropagation(); onRemove(); }}><span>Remove</span></button>}
       {!isCurrent && showPlay && (
         <button className="btn-play" onClick={(e) => { e.stopPropagation(); onPlay(item); }} disabled={isDownloading}>
           <span>{isDownloading ? "DL" : item.id === currentId ? "Now Playing" : "Play"}</span>

@@ -432,6 +432,24 @@ async fn get_downloaded_songs(app: AppHandle) -> Result<Vec<DownloadedSong>, Str
 }
 
 #[tauri::command]
+async fn fetch_url(app: AppHandle, url: String) -> Result<Vec<SearchResult>, String> {
+    let output = app.shell().sidecar("yt-dlp")
+        .map_err(|e| format!("[Shell Error] {}", e))?
+        .args([
+            "--print", "%(id)s|%(title)s|%(duration_string)s|%(channel)s|%(channel_id)s",
+            "--flat-playlist",
+            "--match-filter", "duration > 30",
+            "--playlist-end", "200",
+            &url,
+        ])
+        .output()
+        .await
+        .map_err(|e| format!("[Fetch Error] {}", e))?;
+
+    Ok(parse_results(&output.stdout))
+}
+
+#[tauri::command]
 async fn delete_downloaded_song(app: AppHandle, video_id: String) -> Result<(), String> {
     let cache_dir = app.path().app_cache_dir()
         .map_err(|e| e.to_string())?
@@ -453,6 +471,7 @@ pub fn run() {
             download_hinai_audio,
             get_channel_videos,
             get_downloaded_songs,
+            fetch_url,
             delete_downloaded_song
         ])
         .run(tauri::generate_context!())
