@@ -31,6 +31,7 @@ export default function SearchView({
   onPlay,
   onQueue,
   onDownload,
+  showDownload = true,
 }) {
   return (
     <>
@@ -58,7 +59,7 @@ export default function SearchView({
         <EmptyState message="No videos found" />
       )}
       {channelView && channelVideos.map((item) => (
-        <TrackRow key={item.id} item={item} showSave showQueue showDownload
+        <TrackRow key={item.id} item={item} showSave showQueue showDownload={showDownload}
           currentId={currentId}
           isDownloading={downloading.includes(item.id)}
           isDownloaded={downloadedSongs.some((s) => s.id === item.id)}
@@ -89,7 +90,7 @@ export default function SearchView({
       )}
 
       {!channelView && results.map((item) => (
-        <TrackRow key={item.id} item={item} showSave showQueue showDownload
+        <TrackRow key={item.id} item={item} showSave showQueue showDownload={showDownload}
           currentId={currentId}
           isQueued={queue.some((q) => q.id === item.id)}
           isDownloading={downloading.includes(item.id)}

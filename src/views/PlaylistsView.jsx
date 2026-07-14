@@ -26,6 +26,7 @@ export default function PlaylistsView({
   onRemoveFromPlaylist,
   onImportPlaylistUrl,
   onMovePlaylistTrack,
+  showDownload = true,
 }) {
   const [dragIdx, setDragIdx] = useState(null);
   const [dragOff, setDragOff] = useState(0);
@@ -37,8 +38,9 @@ export default function PlaylistsView({
 
   useEffect(() => {
     if (dragIdx === null) return;
+    const clientY = (e) => e.touches ? e.touches[0].clientY : e.clientY;
     const onMove = (e) => {
-      const off = e.clientY - startY.current;
+      const off = clientY(e) - startY.current;
       setDragOff(off);
       const delta = Math.round(off / itemH.current);
       if (listRef.current) {
@@ -54,7 +56,14 @@ export default function PlaylistsView({
     };
     window.addEventListener("mousemove", onMove);
     window.addEventListener("mouseup", onUp);
-    return () => { window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
+    window.addEventListener("touchmove", onMove, { passive: false });
+    window.addEventListener("touchend", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      window.removeEventListener("touchmove", onMove);
+      window.removeEventListener("touchend", onUp);
+    };
   }, [dragIdx, dropIdx, selectedPlaylist]);
 
   const getStyle = (i) => {
@@ -95,6 +104,7 @@ export default function PlaylistsView({
             <div key={item.id || i} style={{ ...getStyle(i), willChange: dragIdx !== null ? "transform" : "auto" }}>
               <TrackRow item={item}
                 showRemove showQueue
+                showDownload={showDownload}
                 showDragHandle
                 currentId={currentId}
                 isDownloading={downloading.includes(item.id)}
@@ -109,6 +119,16 @@ export default function PlaylistsView({
                   const el = listRef.current?.children[i];
                   if (!el) return;
                   startY.current = e.clientY;
+                  itemH.current = el.getBoundingClientRect().height;
+                  setDragIdx(i);
+                  setDragOff(0);
+                  setDropIdx(i);
+                }}
+                onDragHandleTouchStart={(e) => {
+                  e.preventDefault();
+                  const el = listRef.current?.children[i];
+                  if (!el) return;
+                  startY.current = e.touches[0].clientY;
                   itemH.current = el.getBoundingClientRect().height;
                   setDragIdx(i);
                   setDragOff(0);

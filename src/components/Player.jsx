@@ -18,7 +18,7 @@ export default function Player({
   onPrev,
   onNext,
 }) {
-  if (!currentTrack && !loading) return null;
+  if (!currentTrack && !loading && !currentId) return null;
   const volIcon = volume === 0 ? "🔇" : volume < 0.5 ? "🔉" : "🔊";
 
   return (
