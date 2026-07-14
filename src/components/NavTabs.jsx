@@ -4,7 +4,7 @@ export default function NavTabs({ activeView, onViewChange, counts = {} }) {
     { id: "queue", icon: "📋", label: "Queue", count: counts.queue },
     { id: "history", icon: "🕐", label: "History", count: counts.history },
     { id: "playlists", icon: "📁", label: "Playlists", count: counts.playlists },
-    { id: "downloads", icon: "⬇", label: "Downloads", count: counts.downloads },
+    ...(counts.downloads !== undefined ? [{ id: "downloads", icon: "⬇", label: "Downloads", count: counts.downloads }] : []),
   ];
   return (
     <nav className="sidebar-nav">

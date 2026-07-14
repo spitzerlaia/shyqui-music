@@ -24,6 +24,7 @@ export default function TrackRow({
   onRemove,
   onRowClick,
   onDragHandleMouseDown,
+  onDragHandleTouchStart,
 }) {
   const classes = ["track-item"];
   if (showDragHandle || onRowClick) classes.push("queue-item");
@@ -34,7 +35,9 @@ export default function TrackRow({
       style={onRowClick && !isCurrent ? { cursor: "pointer" } : undefined}
       onClick={!isCurrent && onRowClick ? () => onRowClick() : undefined}>
       {showDragHandle && (
-        <div className="drag-handle" onMouseDown={(e) => { e.stopPropagation(); onDragHandleMouseDown?.(e); }}>
+        <div className="drag-handle"
+          onMouseDown={(e) => { e.stopPropagation(); onDragHandleMouseDown?.(e); }}
+          onTouchStart={(e) => { e.stopPropagation(); onDragHandleTouchStart?.(e); }}>
           <span>≡</span>
         </div>
       )}

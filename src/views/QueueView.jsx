@@ -13,8 +13,9 @@ export default function QueueView({ queue, queueIdx, currentId, currentTitle, cu
 
   useEffect(() => {
     if (!dragState) return;
+    const clientY = (e) => e.touches ? e.touches[0].clientY : e.clientY;
     const onMove = (e) => {
-      const off = e.clientY - startY.current;
+      const off = clientY(e) - startY.current;
       setDragState((prev) => ({ ...prev, offset: off }));
       const delta = Math.round(off / itemH.current);
       dropRef.current = Math.max(0, Math.min(queue.length - 1, dragRef.current + delta));
@@ -28,7 +29,14 @@ export default function QueueView({ queue, queueIdx, currentId, currentTitle, cu
     };
     window.addEventListener("mousemove", onMove);
     window.addEventListener("mouseup", onUp);
-    return () => { window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
+    window.addEventListener("touchmove", onMove, { passive: false });
+    window.addEventListener("touchend", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      window.removeEventListener("touchmove", onMove);
+      window.removeEventListener("touchend", onUp);
+    };
   }, [!!dragState, queue.length]);
 
   const getStyle = (i) => {
@@ -40,6 +48,17 @@ export default function QueueView({ queue, queueIdx, currentId, currentTitle, cu
   };
 
   const isPlayingFromQueue = queueIdx >= 0;
+
+  const startDrag = (e, i) => {
+    const el = listRef.current?.children[i];
+    if (!el) return;
+    const cy = e.touches ? e.touches[0].clientY : e.clientY;
+    startY.current = cy;
+    itemH.current = el.getBoundingClientRect().height;
+    dragRef.current = i;
+    dropRef.current = i;
+    setDragState({ index: i, offset: 0 });
+  };
 
   return (
     <div ref={listRef}>
@@ -60,16 +79,8 @@ export default function QueueView({ queue, queueIdx, currentId, currentTitle, cu
               showPlay={!isCurrent}
               onPlay={() => onPlayFromQueue(i)}
               onRemove={() => onRemoveFromQueue(i)}
-              onDragHandleMouseDown={(e) => {
-                e.preventDefault();
-                const el = listRef.current?.children[i];
-                if (!el) return;
-                startY.current = e.clientY;
-                itemH.current = el.getBoundingClientRect().height;
-                dragRef.current = i;
-                dropRef.current = i;
-                setDragState({ index: i, offset: 0 });
-              }} />
+              onDragHandleMouseDown={(e) => { e.preventDefault(); startDrag(e, i); }}
+              onDragHandleTouchStart={(e) => { e.preventDefault(); startDrag(e, i); }} />
           </div>
         );
       })}

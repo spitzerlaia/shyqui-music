@@ -16,6 +16,7 @@ export default function HistoryView({
   onPlay,
   onQueue,
   onDownload,
+  showDownload = true,
 }) {
   return (
     <>
@@ -27,7 +28,7 @@ export default function HistoryView({
       </div>
       {history.length === 0 && <EmptyState message="No history yet" />}
       {history.map((item, i) => (
-        <TrackRow key={`h-${item.id}-${i}`} item={item} showSave showQueue showDownload showRemove
+        <TrackRow key={`h-${item.id}-${i}`} item={item} showSave showQueue showDownload={showDownload} showRemove
           currentId={currentId}
           isQueued={queue.some((q) => q.id === item.id)}
           isDownloading={downloading.includes(item.id)}
