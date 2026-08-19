@@ -6,8 +6,6 @@ export default function HistoryView({
   onClearHistory,
   onRemoveFromHistory,
   queue,
-  downloadedSongs,
-  downloading,
   saveOpen,
   onSaveToggle,
   playlists,
@@ -15,8 +13,7 @@ export default function HistoryView({
   currentId,
   onPlay,
   onQueue,
-  onDownload,
-  showDownload = true,
+  onChannelClick,
 }) {
   return (
     <>
@@ -28,19 +25,17 @@ export default function HistoryView({
       </div>
       {history.length === 0 && <EmptyState message="No history yet" />}
       {history.map((item, i) => (
-        <TrackRow key={`h-${item.id}-${i}`} item={item} showSave showQueue showDownload={showDownload} showRemove
+        <TrackRow key={`h-${item.id}-${i}`} item={item} showSave showQueue showRemove
           currentId={currentId}
           isQueued={queue.some((q) => q.id === item.id)}
-          isDownloading={downloading.includes(item.id)}
-          isDownloaded={downloadedSongs.some((s) => s.id === item.id)}
           saveOpen={saveOpen}
           playlists={playlists}
           onPlay={() => onPlay(item)}
           onQueue={onQueue}
-          onDownload={onDownload}
           onSaveToggle={onSaveToggle}
           onAddToPlaylist={onAddToPlaylist}
-          onRemove={() => onRemoveFromHistory(i)} />
+          onRemove={() => onRemoveFromHistory(i)}
+          onChannelClick={onChannelClick} />
       ))}
     </>
   );

@@ -7,22 +7,19 @@ export default function TrackRow({
   showRemove,
   showPlay = true,
   showQueue,
-  showDownload,
   showDragHandle,
   isQueued,
-  isDownloading,
-  isDownloaded,
   saveOpen,
   playlists,
   currentId,
   isCurrent,
   onPlay,
   onQueue,
-  onDownload,
   onSaveToggle,
   onAddToPlaylist,
   onRemove,
   onRowClick,
+  onChannelClick,
   onDragHandleMouseDown,
   onDragHandleTouchStart,
 }) {
@@ -44,17 +41,16 @@ export default function TrackRow({
       {item.thumbnail ? <img className="track-thumb" src={item.thumbnail} alt="" loading="lazy" /> : <div className="track-thumb track-thumb-placeholder" />}
       <div className="track-info">
         <div className="track-title">
-          {item.source && <span className={`source-tag source-tag-${item.source}`}>{item.source === "youtube" ? "YT" : "HN"}</span>}
           {item.title}
           {isCurrent && <span className="now-playing-badge">Now Playing</span>}
         </div>
-        {item.channel && <div className="track-channel">{item.channel}</div>}
-        {isDownloading && (
-          <div className="downloading-indicator">
-            Downloading<span className="dl-dots"><span>.</span><span>.</span><span>.</span></span>
+        {item.channel && (
+          <div className={`track-channel${onChannelClick ? " track-channel-clickable" : ""}`}
+            onClick={onChannelClick ? (e) => { e.stopPropagation(); onChannelClick({ id: item.channel_id, name: item.channel, url: item.channel_url }); } : undefined}
+            title={onChannelClick ? "View channel" : undefined}>
+            {item.channel}
           </div>
         )}
-        {isDownloaded && !isDownloading && <div className="downloaded-badge">Cached</div>}
       </div>
       <span className="track-duration">
         {item.duration != null
@@ -63,7 +59,7 @@ export default function TrackRow({
       </span>
       {!isCurrent && showSave && (
         <div className="save-wrapper">
-          <button className="btn-save" onClick={(e) => { e.stopPropagation(); onSaveToggle(item.id); }} disabled={isDownloading}>
+          <button className="btn-save" onClick={(e) => { e.stopPropagation(); onSaveToggle(item.id); }}>
             💾
           </button>
           {saveOpen === item.id && (
@@ -72,20 +68,14 @@ export default function TrackRow({
         </div>
       )}
       {!isCurrent && showQueue && (
-        <button className="btn-queue" onClick={(e) => { e.stopPropagation(); onQueue(item); }} disabled={isQueued || isDownloading || item.id === currentId}>
+        <button className="btn-queue" onClick={(e) => { e.stopPropagation(); onQueue(item); }} disabled={isQueued || item.id === currentId}>
           <span>{item.id === currentId ? "Playing" : isQueued ? "Queued" : "+"}</span>
         </button>
       )}
-      {!isCurrent && showDownload && !isDownloaded && (
-        <button className="btn-download" onClick={(e) => { e.stopPropagation(); onDownload(item); }} disabled={isDownloading}>
-          <span>{isDownloading ? "..." : "DL"}</span>
-        </button>
-      )}
-      {!isCurrent && isDownloaded && !isDownloading && <span className="dl-check">📥</span>}
       {showRemove && <button className="btn-remove-sm" onClick={(e) => { e.stopPropagation(); onRemove(); }}><span>Remove</span></button>}
       {!isCurrent && showPlay && (
-        <button className="btn-play" onClick={(e) => { e.stopPropagation(); onPlay(item); }} disabled={isDownloading}>
-          <span>{isDownloading ? "DL" : item.id === currentId ? "Now Playing" : "Play"}</span>
+        <button className="btn-play" onClick={(e) => { e.stopPropagation(); onPlay(item); }}>
+          <span>{item.id === currentId ? "Now Playing" : "Play"}</span>
         </button>
       )}
     </div>

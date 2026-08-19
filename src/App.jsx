@@ -1,10 +1,7 @@
-import { useState, useEffect, lazy, Suspense } from "react";
-import { initTauri, isTauri } from "./tauri";
-import * as api from "./api";
+import { useState, useEffect } from "react";
+import { initTauri } from "./tauri";
 import DesktopApp from "./DesktopApp";
 import "./App.css";
-
-const WebApp = lazy(() => import("./WebApp"));
 
 function LoadingScreen() {
   return (
@@ -22,13 +19,8 @@ function App() {
 
   useEffect(() => {
     (async () => {
-      await initTauri();
-      await api.initApi();
-      const hasRealInvoke =
-        typeof window !== "undefined" &&
-        window.__TAURI_INTERNALS__ !== undefined &&
-        typeof window.__TAURI_INTERNALS__.invoke === "function";
-      setIsTauriMode(isTauri() && hasRealInvoke);
+      const ok = await initTauri();
+      setIsTauriMode(ok);
       setInitDone(true);
     })();
   }, []);
@@ -36,9 +28,13 @@ function App() {
   if (!initDone) return <LoadingScreen />;
   if (!isTauriMode) {
     return (
-      <Suspense fallback={<LoadingScreen />}>
-        <WebApp />
-      </Suspense>
+      <div className="app-layout">
+        <main className="main-area">
+          <div className="empty-state">
+            Esta app solo funciona dentro de la aplicacion de escritorio / movil.
+          </div>
+        </main>
+      </div>
     );
   }
   return <DesktopApp />;

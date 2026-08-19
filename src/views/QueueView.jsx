@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import EmptyState from "../components/EmptyState";
 import TrackRow from "../components/TrackRow";
 
-export default function QueueView({ queue, queueIdx, currentId, currentTitle, currentThumb, currentTime, duration, onPlayFromQueue, onRemoveFromQueue, onMoveQueueItem }) {
+export default function QueueView({ queue, queueIdx, currentId, currentTitle, currentThumb, currentTime, duration, onPlayFromQueue, onRemoveFromQueue, onMoveQueueItem, saveOpen, onSaveToggle, playlists, onAddToPlaylist, onChannelClick }) {
   const currentItem = currentId ? { id: currentId, title: currentTitle, thumbnail: currentThumb, duration: currentTime } : null;
   const [dragState, setDragState] = useState(null);
   const dragRef = useRef(null);
@@ -73,12 +73,17 @@ export default function QueueView({ queue, queueIdx, currentId, currentTitle, cu
           <div key={item.id || i}
             style={{ ...getStyle(i), opacity: isPlayed ? 0.35 : 1, willChange: dragState ? "transform" : "auto" }}>
             <TrackRow item={item}
-              showRemove
+              showSave showRemove
               showDragHandle
               isCurrent={isCurrent}
               showPlay={!isCurrent}
+              saveOpen={saveOpen}
+              playlists={playlists}
               onPlay={() => onPlayFromQueue(i)}
               onRemove={() => onRemoveFromQueue(i)}
+              onSaveToggle={onSaveToggle}
+              onAddToPlaylist={onAddToPlaylist}
+              onChannelClick={onChannelClick}
               onDragHandleMouseDown={(e) => { e.preventDefault(); startDrag(e, i); }}
               onDragHandleTouchStart={(e) => { e.preventDefault(); startDrag(e, i); }} />
           </div>

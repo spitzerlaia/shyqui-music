@@ -14,19 +14,16 @@ export default function PlaylistsView({
   onBack,
   onAddAllToQueue,
   currentId,
-  downloading,
-  downloadedSongs,
   queue,
   saveOpen,
   onSaveToggle,
   onPlay,
   onQueue,
-  onDownload,
   onAddToPlaylist,
   onRemoveFromPlaylist,
   onImportPlaylistUrl,
   onMovePlaylistTrack,
-  showDownload = true,
+  onChannelClick,
 }) {
   const [dragIdx, setDragIdx] = useState(null);
   const [dragOff, setDragOff] = useState(0);
@@ -103,16 +100,17 @@ export default function PlaylistsView({
           {pl.tracks.map((item, i) => (
             <div key={item.id || i} style={{ ...getStyle(i), willChange: dragIdx !== null ? "transform" : "auto" }}>
               <TrackRow item={item}
-                showRemove showQueue
-                showDownload={showDownload}
+                showSave showRemove showQueue
                 showDragHandle
                 currentId={currentId}
-                isDownloading={downloading.includes(item.id)}
-                isDownloaded={downloadedSongs.some((s) => s.id === item.id)}
                 isQueued={queue.some((q) => q.id === item.id)}
+                saveOpen={saveOpen}
+                playlists={playlists}
                 onPlay={() => onPlay(item)}
                 onQueue={onQueue}
-                onDownload={onDownload}
+                onSaveToggle={onSaveToggle}
+                onAddToPlaylist={onAddToPlaylist}
+                onChannelClick={onChannelClick}
                 onRemove={() => onRemoveFromPlaylist(selectedPlaylist, i)}
                 onDragHandleMouseDown={(e) => {
                   e.preventDefault();

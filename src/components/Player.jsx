@@ -2,7 +2,6 @@ import { formatTime } from "../utils/helpers";
 import VolumeSlider from "./VolumeSlider";
 
 export default function Player({
-  currentTrack,
   currentTitle,
   currentThumb,
   currentId,
@@ -18,7 +17,7 @@ export default function Player({
   onPrev,
   onNext,
 }) {
-  if (!currentTrack && !loading && !currentId) return null;
+  if (!loading && !currentId) return null;
   const volIcon = volume === 0 ? "🔇" : volume < 0.5 ? "🔉" : "🔊";
 
   return (
@@ -45,7 +44,7 @@ export default function Player({
           <input type="range" className="progress-bar" disabled={loading}
             min={0} max={duration || 0} value={currentTime} onChange={onSeek}
             style={{
-              background: `linear-gradient(to right, #00f5ff 0%, #00f5ff ${duration ? (currentTime / duration) * 100 : 0}%, rgba(255,255,255,0.08) ${duration ? (currentTime / duration) * 100 : 0}%, rgba(255,255,255,0.08) 100%)`
+              background: `linear-gradient(to right, var(--accent-solid) 0%, var(--accent-solid) ${duration ? (currentTime / duration) * 100 : 0}%, rgba(var(--accent) / 0.25) ${duration ? (currentTime / duration) * 100 : 0}%, rgba(var(--accent) / 0.25) 100%)`
             }} />
           <span className="time">{loading ? "--:--" : formatTime(Number(duration))}</span>
         </div>

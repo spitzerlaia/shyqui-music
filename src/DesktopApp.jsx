@@ -1,34 +1,27 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { invoke, convertFileSrc, isTauri } from "./tauri";
-import * as api from "./api";
+import { invoke } from "./tauri";
 import { genId } from "./utils/helpers";
 import { useLocalStorage } from "./hooks/useLocalStorage";
 import NavTabs from "./components/NavTabs";
-import SettingsPanel from "./components/SettingsPanel";
 import Player from "./components/Player";
-import DebugPanel from "./components/DebugPanel";
+import NowPlaying from "./components/NowPlaying";
 import SearchView from "./views/SearchView";
 import QueueView from "./views/QueueView";
 import PlaylistsView from "./views/PlaylistsView";
 import HistoryView from "./views/HistoryView";
-import DownloadsView from "./views/DownloadsView";
+import SettingsPanel from "./components/SettingsPanel";
+import { hexToRgb, mixHex, buildThemeFrom, normalizeTheme } from "./themes";
 import "./App.css";
 
-function exec(cmd, args) {
-  return invoke(cmd, args);
-}
-
-export default function DesktopApp({ onLogout }) {
+export default function DesktopApp() {
   if (typeof window !== "undefined" && !window.__TAURI_INTERNALS__) {
     return null;
   }
 
   const [query, setQuery] = useState("");
-  const [source, setSource] = useState("youtube");
   const [results, setResults] = useState([]);
   const [channels, setChannels] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [currentTrack, setCurrentTrack] = useState(null);
   const [playing, setPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -36,12 +29,10 @@ export default function DesktopApp({ onLogout }) {
   const [currentId, setCurrentId] = useLocalStorage("shyqui_current_id", null);
   const [currentTitle, setCurrentTitle] = useLocalStorage("shyqui_current_title", "");
   const [currentThumb, setCurrentThumb] = useLocalStorage("shyqui_current_thumb", "");
+  const [currentChannel, setCurrentChannel] = useLocalStorage("shyqui_current_channel", "");
   const [queue, setQueue] = useLocalStorage("shyqui_queue", []);
   const [queueIdx, setQueueIdx] = useLocalStorage("shyqui_queue_idx", -1);
   const [history, setHistory] = useLocalStorage("shyqui_history", []);
-  const [keptIds, setKeptIds] = useLocalStorage("shyqui_kept_ids", []);
-  const [downloading, setDownloading] = useState([]);
-  const [showSettings, setShowSettings] = useState(false);
   const [playlists, setPlaylists] = useLocalStorage("shyqui_playlists", []);
   const [activeView, setActiveView] = useState("search");
   const [selectedPlaylist, setSelectedPlaylist] = useState(null);
@@ -50,22 +41,17 @@ export default function DesktopApp({ onLogout }) {
   const [channelView, setChannelView] = useState(null);
   const [channelVideos, setChannelVideos] = useState([]);
   const [channelLoading, setChannelLoading] = useState(false);
-  const [downloadedSongs, setDownloadedSongs] = useState([]);
-  const [downloadFilter, setDownloadFilter] = useState("");
-  const [hinaiFilters, setHinaiFilters] = useState({ status: "", sort: "ranked_date_desc", genre: 0, language: 0 });
-  const [showDebug, setShowDebug] = useState(false);
-  const [logs, setLogs] = useState([]);
-  const [serverInfo, setServerInfo] = useState(null);
-  const logRef = useRef([]);
+  const [error, setError] = useState(null);
+  const [videoMode, setVideoMode] = useState(null);
+  const [videoOpen, setVideoOpen] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [theme, setTheme] = useLocalStorage(
+    "shyqui_theme",
+    { ...buildThemeFrom("#ff6fb8", "#22101d"), preset: "rosa" },
+    normalizeTheme
+  );
 
-  const addLog = (msg) => {
-    const entry = `[${new Date().toLocaleTimeString()}] ${msg}`;
-    logRef.current = [...logRef.current.slice(-99), entry];
-    setLogs(logRef.current);
-    console.log(entry);
-  };
-
-  const audioRef = useRef(null);
+  const playerRef = useRef(null);
   const queueRef = useRef([]);
   const queueIdxRef = useRef(-1);
 
@@ -73,37 +59,61 @@ export default function DesktopApp({ onLogout }) {
   useEffect(() => { queueIdxRef.current = queueIdx; }, [queueIdx]);
 
   useEffect(() => {
-    (async () => {
-      try { setServerInfo(await exec("get_server_info")); } catch {}
-    })();
-  }, []);
+    const style = document.documentElement.style;
+    const setTriplet = (name, hex) => style.setProperty(name, hexToRgb(hex).join(" "));
+    setTriplet("--accent", theme.accent);
+    setTriplet("--text", theme.text);
+    setTriplet("--glass", theme.glass);
+    setTriplet("--danger", theme.danger);
+    setTriplet("--warn", theme.warn);
+    setTriplet("--star", theme.star);
+    style.setProperty("--bg-1", theme.bg);
+    style.setProperty("--bg-2", mixHex(theme.bg, "#000000", 12));
+    style.setProperty("--bg-3", mixHex(theme.bg, "#000000", 30));
+    style.setProperty("--on-accent", theme.onAccent);
+    style.setProperty("--text-soft", theme.textSoft);
+  }, [theme]);
 
   const handleSearch = async () => {
     if (!query) return;
-    setLoading(true); setChannelView(null);
+    setLoading(true); setChannelView(null); setError(null);
     try {
-      const isUrl = query.startsWith("http://") || query.startsWith("https://");
+      const isUrl = /^https?:\/\//.test(query) ||
+        query.includes("youtube.com/") ||
+        query.includes("youtu.be/") ||
+        /^[A-Za-z0-9_-]{11}$/.test(query.trim());
       if (isUrl) {
-        const vids = await exec("fetch_url", { url: query });
-        setResults(vids); setChannels([]);
-      } else if (source === "hinai") {
-        const [vids, chans] = await exec("search_hinai", { query, filters: hinaiFilters });
-        setResults(vids); setChannels(chans);
+        const [tracks, chans] = await invoke("fetch_url", { url: query });
+        setResults(tracks); setChannels(chans);
       } else {
-        const [vids, chans] = await exec("search_youtube", { query });
+        const [vids, chans] = await invoke("search_youtube", { query });
         setResults(vids); setChannels(chans);
       }
-    } catch (err) { addLog("Search failed: " + err); }
-    finally { setLoading(false); }
+    } catch (err) {
+      console.error(err);
+      setError(String(err));
+    } finally {
+      setLoading(false);
+    }
   };
 
   const openChannel = async (ch) => {
-    setChannelView(ch); setChannelLoading(true); setActiveView("search");
+    if (!ch || !ch.id) return;
+    setChannelView({ ...ch }); setChannelLoading(true); setActiveView("search"); setError(null);
     try {
-      const vids = await exec("get_channel_videos", { channelUrl: ch.url });
+      const vids = await invoke("get_channel_videos", { channelId: ch.id });
       setChannelVideos(vids);
-    } catch (err) { addLog("Channel failed: " + err); setChannelVideos([]); }
-    finally { setChannelLoading(false); }
+    } catch (err) {
+      console.error(err);
+      setError(String(err));
+      setChannelVideos([]);
+    } finally {
+      setChannelLoading(false);
+    }
+  };
+
+  const handleChannelClick = (ch) => {
+    openChannel(ch);
   };
 
   const addHistory = useCallback((id, title, thumb, dur) => {
@@ -113,36 +123,14 @@ export default function DesktopApp({ onLogout }) {
     });
   }, [setHistory]);
 
-  const playTrack = async (item) => {
-    const { id: videoId, title, thumbnail, source: itemSource } = item;
-    setLoading(true); setCurrentId(videoId);
-    const cached = downloadedSongs.find((s) => s.id === videoId);
-    if (cached) {
-      const src = convertFileSrc(cached.file_path);
-      setCurrentTrack(src);
-      if (cached.title) setCurrentTitle(cached.title);
-      if (cached.thumbnail) setCurrentThumb(cached.thumbnail);
-      setLoading(false); return;
-    }
-    setDownloading((prev) => [...prev, videoId]);
-    try {
-      const found = results.find((r) => r.id === videoId) || history.find((r) => r.id === videoId) || queue.find((r) => r.id === videoId);
-      const meta = found ? { ...found, duration: String(found.duration ?? "") } : null;
-      let absolutePath;
-      if ((itemSource || source) === "hinai") {
-        absolutePath = await exec("download_hinai_audio", { beatmapId: videoId, meta });
-      } else {
-        absolutePath = await exec("download_audio", { videoId, meta });
-      }
-      const src = convertFileSrc(absolutePath);
-      setCurrentTrack(src);
-      if (title) setCurrentTitle(title); if (thumbnail) setCurrentThumb(thumbnail);
-      loadDownloads();
-    } catch (err) {
-      addLog("Download error: " + err); setCurrentTrack(null); setCurrentId(null);
-    } finally {
-      setDownloading((prev) => prev.filter((id) => id !== videoId)); setLoading(false);
-    }
+  const playTrack = (item) => {
+    const { id: videoId, title, thumbnail } = item;
+    setLoading(true); setCurrentId(videoId); setError(null);
+    setVideoMode(videoId);
+    setCurrentTime(0); setDuration(0);
+    if (title) setCurrentTitle(title);
+    if (thumbnail) setCurrentThumb(thumbnail);
+    if (item.channel) setCurrentChannel(item.channel);
   };
 
   const handlePlayItem = (item) => { playTrack(item); };
@@ -155,12 +143,9 @@ export default function DesktopApp({ onLogout }) {
       return;
     }
     setQueue((prev) => [...prev, item]);
-    downloadTrack(item);
   };
 
   const removeFromQueue = (index) => {
-    const q = queueRef.current;
-    const removed = q[index];
     setQueue((prev) => prev.filter((_, i) => i !== index));
     setQueueIdx((prev) => {
       if (prev < 0) return prev;
@@ -168,11 +153,6 @@ export default function DesktopApp({ onLogout }) {
       if (index === prev) return -1;
       return prev;
     });
-    if (removed && !keptIds.includes(removed.id)) {
-      exec("delete_downloaded_song", { videoId: removed.id })
-        .then(() => setDownloadedSongs((prev) => prev.filter((s) => s.id !== removed.id)))
-        .catch((e) => addLog("Auto-cleanup error: " + e));
-    }
   };
 
   const moveQueueItem = (fromIndex, toIndex) => {
@@ -194,105 +174,91 @@ export default function DesktopApp({ onLogout }) {
   const playFromQueue = (index) => {
     const q = queueRef.current;
     if (index < 0 || index >= q.length) return;
-    const item = q[index];
-    if (audioRef.current) { audioRef.current.pause(); audioRef.current.src = ""; }
+    if (q[index].id === currentId && playerRef.current) {
+      playerRef.current.seekTo(0, true);
+      playerRef.current.playVideo();
+      return;
+    }
     setQueueIdx(index);
-    setCurrentTime(0); setDuration(0);
-    playTrack(item);
+    playTrack(q[index]);
   };
 
   const playNext = useCallback(() => {
-    if (audioRef.current) { audioRef.current.pause(); audioRef.current.src = ""; }
     const q = queueRef.current;
     const nextIdx = queueIdxRef.current + 1;
     if (nextIdx < 0 || nextIdx >= q.length) {
-      setCurrentTrack(null); setCurrentId(null); setCurrentTitle(""); setCurrentThumb("");
+      setCurrentId(null); setVideoMode(null); setPlaying(false);
+      setCurrentTitle(""); setCurrentThumb(""); setCurrentChannel("");
       setCurrentTime(0); setDuration(0); return;
     }
     setQueueIdx(nextIdx);
-    setLoading(true);
     playTrack(q[nextIdx]);
   }, []);
 
-  const togglePlay = useCallback(() => {
-    if (!audioRef.current) return;
-    audioRef.current.paused ? audioRef.current.play() : audioRef.current.pause();
-  }, []);
-
-  const handleTimeUpdate = () => { if (audioRef.current) setCurrentTime(audioRef.current.currentTime); };
-  const handleLoadedMeta = () => {
-    if (audioRef.current) { setDuration(audioRef.current.duration); setCurrentTime(0); audioRef.current.play().catch(() => {}); }
-  };
-  const handleEnded = () => {
-    const finishedId = currentId;
-    const wasFromQueue = queueIdxRef.current >= 0;
-    addHistory(currentId, currentTitle, currentThumb, duration); setPlaying(false); setCurrentTime(0); playNext();
-    if (finishedId && !wasFromQueue && !keptIds.includes(finishedId)) {
-      exec("delete_downloaded_song", { videoId: finishedId })
-        .then(() => setDownloadedSongs((prev) => prev.filter((s) => s.id !== finishedId)))
-        .catch((e) => addLog("Auto-cleanup error: " + e));
+  const playPrevious = () => {
+    const q = queueRef.current;
+    const prevIdx = queueIdxRef.current - 1;
+    if (prevIdx >= 0 && prevIdx < q.length) {
+      setQueueIdx(prevIdx);
+      playTrack(q[prevIdx]);
+    } else if (playerRef.current) {
+      playerRef.current.seekTo(0, true);
+      setCurrentTime(0);
     }
   };
-  const seek = (e) => { if (audioRef.current) { audioRef.current.currentTime = e.target.value; setCurrentTime(e.target.value); } };
-  const changeVolume = (v) => { setVolume(v); if (audioRef.current) audioRef.current.volume = v; };
+
+  const togglePlay = () => {
+    const p = playerRef.current;
+    if (!p) return;
+    playing ? p.pauseVideo() : p.playVideo();
+  };
+
+  const handlePlayerReady = (p) => {
+    playerRef.current = p;
+    p.setVolume(Math.round(volume * 100));
+    setDuration(p.getDuration() || 0);
+    setLoading(false);
+  };
+
+  const handlePlayerState = (state) => {
+    const YT = window.YT;
+    if (!YT) return;
+    if (state === YT.PlayerState.PLAYING) {
+      setPlaying(true); setLoading(false);
+    } else if (state === YT.PlayerState.PAUSED || state === YT.PlayerState.BUFFERING) {
+      setPlaying(false);
+    }
+  };
+
+  const handlePlayerTime = (cur, dur) => {
+    setCurrentTime(cur);
+    if (dur) setDuration(dur);
+  };
+
+  const handleEnded = () => {
+    addHistory(currentId, currentTitle, currentThumb, duration);
+    setPlaying(false); setCurrentTime(0);
+    playNext();
+  };
+
+  const handlePlayerError = () => {
+    setError("El reproductor no pudo cargar el video. Prueba con otro.");
+    setLoading(false);
+  };
+
+  const seek = (e) => {
+    const v = parseFloat(e.target.value);
+    setCurrentTime(v);
+    if (playerRef.current) playerRef.current.seekTo(v, true);
+  };
+
+  const changeVolume = (v) => {
+    setVolume(v);
+    if (playerRef.current) playerRef.current.setVolume(Math.round(v * 100));
+  };
+
   const clearHistory = () => setHistory([]);
   const removeHistoryItem = (index) => { setHistory((prev) => prev.filter((_, i) => i !== index)); };
-
-  useEffect(() => { reconcileDownloads(); }, []);
-  useEffect(() => { if (audioRef.current) audioRef.current.volume = volume; }, [volume]);
-  useEffect(() => {
-    const el = audioRef.current; if (!el) return;
-    const onPlay = () => setPlaying(true); const onPause = () => setPlaying(false);
-    el.addEventListener("play", onPlay); el.addEventListener("pause", onPause);
-    return () => { el.removeEventListener("play", onPlay); el.removeEventListener("pause", onPause); };
-  }, [currentTrack]);
-
-  const loadDownloads = async () => {
-    try { setDownloadedSongs(await exec("get_downloaded_songs")); }
-    catch (e) { addLog("Failed to load downloads: " + e); }
-  };
-
-  const reconcileDownloads = async () => {
-    try {
-      const all = await exec("get_downloaded_songs");
-      const playlistIds = new Set(playlists.flatMap((p) => p.tracks.map((t) => t.id)));
-      const toDelete = all.filter((s) => !keptIds.includes(s.id) && !playlistIds.has(s.id));
-      for (const s of toDelete) {
-        await exec("delete_downloaded_song", { videoId: s.id }).catch(() => {});
-      }
-      if (toDelete.length > 0) addLog(`Cleaned up ${toDelete.length} non-kept downloads`);
-      const kept = new Set([...keptIds, ...playlistIds]);
-      setDownloadedSongs(all.filter((s) => kept.has(s.id)));
-    } catch (e) { addLog("Reconcile error: " + e); }
-  };
-
-  const downloadTrack = async (item) => {
-    if (downloadedSongs.some((s) => s.id === item.id)) return;
-    setDownloading((prev) => [...prev, item.id]);
-    try {
-      const meta = item ? { ...item, duration: String(item.duration ?? "") } : null;
-      if ((item.source || source) === "hinai") {
-        await exec("download_hinai_audio", { beatmapId: item.id, meta });
-      } else {
-        await exec("download_audio", { videoId: item.id, meta });
-      }
-      loadDownloads();
-    } catch (e) { addLog("Download failed: " + e); }
-    finally { setDownloading((prev) => prev.filter((id) => id !== item.id)); }
-  };
-
-  const keepDownload = (item) => {
-    setKeptIds((prev) => prev.includes(item.id) ? prev : [...prev, item.id]);
-    downloadTrack(item);
-  };
-
-  const deleteDownload = async (videoId) => {
-    try {
-      await exec("delete_downloaded_song", { videoId });
-      setDownloadedSongs((prev) => prev.filter((s) => s.id !== videoId));
-    } catch (e) { addLog("Delete error: " + e); }
-    if (currentId === videoId) { playNext(); }
-  };
 
   const createPlaylist = () => {
     const name = newPlaylistName.trim(); if (!name) return;
@@ -306,14 +272,15 @@ export default function DesktopApp({ onLogout }) {
     setPlaylists((prev) => prev.map((p) =>
       p.id === playlistId && !p.tracks.some((t) => t.id === track.id) ? { ...p, tracks: [...p.tracks, track] } : p
     )); setSaveOpen(null);
-    downloadTrack(track);
   };
   const importPlaylistUrl = async (playlistId, url) => {
     try {
-      const tracks = await exec("fetch_url", { url });
+      const [tracks] = await invoke("fetch_url", { url });
       tracks.forEach((track) => addToPlaylist(playlistId, track));
-      addLog(`Imported ${tracks.length} tracks from URL`);
-    } catch (err) { addLog("Import failed: " + err); }
+    } catch (err) {
+      console.error(err);
+      setError(String(err));
+    }
   };
   const removeFromPlaylist = (playlistId, trackIndex) => {
     const pl = playlists.find((p) => p.id === playlistId);
@@ -343,35 +310,19 @@ export default function DesktopApp({ onLogout }) {
     setActiveView(view);
     setSaveOpen(null);
     if (view === "playlists") setSelectedPlaylist(null);
-    if (view === "downloads") loadDownloads();
   };
-
-  const playPrevious = () => {
-    const q = queueRef.current;
-    const prevIdx = queueIdxRef.current - 1;
-    if (prevIdx >= 0 && prevIdx < q.length) {
-      if (audioRef.current) { audioRef.current.pause(); audioRef.current.src = ""; }
-      setQueueIdx(prevIdx);
-      setCurrentTime(0); setDuration(0);
-      playTrack(q[prevIdx]);
-    } else {
-      if (audioRef.current) audioRef.current.currentTime = 0;
-    }
-  };
-
-  const clearDebug = () => { setLogs([]); logRef.current = []; };
 
   const renderContent = () => {
     switch (activeView) {
       case "queue":
-        return <QueueView queue={queue} queueIdx={queueIdx} currentId={currentId} currentTitle={currentTitle} currentThumb={currentThumb} currentTime={currentTime} duration={duration} onPlayFromQueue={playFromQueue} onRemoveFromQueue={removeFromQueue} onMoveQueueItem={moveQueueItem} />;
+        return <QueueView queue={queue} queueIdx={queueIdx} currentId={currentId} currentTitle={currentTitle} currentThumb={currentThumb} currentTime={currentTime} duration={duration} onPlayFromQueue={playFromQueue} onRemoveFromQueue={removeFromQueue} onMoveQueueItem={moveQueueItem} saveOpen={saveOpen} onSaveToggle={setSaveOpen} playlists={playlists} onAddToPlaylist={addToPlaylist} onChannelClick={handleChannelClick} />;
       case "history":
         return (
           <HistoryView
             history={history} onClearHistory={clearHistory} onRemoveFromHistory={removeHistoryItem}
-            queue={queue} downloadedSongs={downloadedSongs} downloading={downloading}
-            saveOpen={saveOpen} onSaveToggle={setSaveOpen} playlists={playlists} onAddToPlaylist={addToPlaylist}
-            currentId={currentId} onPlay={handlePlayItem} onQueue={addToQueue} onDownload={keepDownload}
+            queue={queue} saveOpen={saveOpen} onSaveToggle={setSaveOpen} playlists={playlists} onAddToPlaylist={addToPlaylist}
+            currentId={currentId} onPlay={handlePlayItem} onQueue={addToQueue}
+            onChannelClick={handleChannelClick}
           />
         );
       case "playlists":
@@ -382,36 +333,24 @@ export default function DesktopApp({ onLogout }) {
             onCreatePlaylist={createPlaylist} onSelectPlaylist={setSelectedPlaylist}
             onDeletePlaylist={deletePlaylist} onBack={() => setSelectedPlaylist(null)}
             onAddAllToQueue={() => { const pl = playlists.find((p) => p.id === selectedPlaylist); if (pl) pl.tracks.forEach((t) => addToQueue(t)); }}
-            currentId={currentId} downloading={downloading} downloadedSongs={downloadedSongs}
-            queue={queue} saveOpen={saveOpen} onSaveToggle={setSaveOpen}
-            onPlay={handlePlayItem} onQueue={addToQueue} onDownload={keepDownload}
+            currentId={currentId} queue={queue} saveOpen={saveOpen} onSaveToggle={setSaveOpen}
+            onPlay={handlePlayItem} onQueue={addToQueue}
             onAddToPlaylist={addToPlaylist} onRemoveFromPlaylist={removeFromPlaylist}
             onImportPlaylistUrl={importPlaylistUrl} onMovePlaylistTrack={movePlaylistTrack}
-          />
-        );
-      case "downloads":
-        return (
-          <DownloadsView
-            downloadedSongs={downloadedSongs} downloadFilter={downloadFilter}
-            onFilterChange={setDownloadFilter} onRefresh={reconcileDownloads}
-            onClearFilter={() => setDownloadFilter("")}
-            currentId={currentId} queue={queue} onPlay={handlePlayItem}
-            onQueue={addToQueue} onDelete={deleteDownload}
+            onChannelClick={handleChannelClick}
           />
         );
       default:
         return (
           <SearchView
             query={query} onQueryChange={setQuery} onSearch={handleSearch}
-            source={source} onSourceChange={setSource}
-            hinaiFilters={hinaiFilters} onHinaiFiltersChange={setHinaiFilters}
             loading={loading} results={results} channels={channels}
             channelView={channelView} channelVideos={channelVideos} channelLoading={channelLoading}
             onOpenChannel={openChannel} onBackFromChannel={() => { setChannelView(null); setChannelVideos([]); }}
-            queue={queue} downloadedSongs={downloadedSongs} downloading={downloading}
-            saveOpen={saveOpen} onSaveToggle={setSaveOpen} playlists={playlists}
+            queue={queue} saveOpen={saveOpen} onSaveToggle={setSaveOpen} playlists={playlists}
             onAddToPlaylist={addToPlaylist} currentId={currentId}
-            onPlay={handlePlayItem} onQueue={addToQueue} onDownload={keepDownload}
+            onPlay={handlePlayItem} onQueue={addToQueue}
+            onChannelClick={handleChannelClick}
           />
         );
     }
@@ -424,51 +363,58 @@ export default function DesktopApp({ onLogout }) {
         <NavTabs
           activeView={activeView}
           onViewChange={handleViewChange}
-          counts={{ queue: queue.length, history: history.length, playlists: playlists.length, downloads: downloadedSongs.length }}
+          counts={{ queue: queue.length, history: history.length, playlists: playlists.length }}
         />
         <div className="sidebar-footer">
-          {serverInfo?.available && (
-            <a href={serverInfo.url} target="_blank" rel="noreferrer"
-              className="sidebar-tool-btn"
-              title={`Server at ${serverInfo.url}`}
-              style={{ fontSize: "0.6rem", textDecoration: "none" }}>
-              📡
-            </a>
-          )}
-          <button className={`sidebar-tool-btn ${showDebug ? "active" : ""}`} onClick={() => setShowDebug(!showDebug)}>🐛</button>
-          <button className={`sidebar-tool-btn ${showSettings ? "active" : ""}`} onClick={() => setShowSettings(!showSettings)}>⚙</button>
+          <button
+            className={`sidebar-tool-btn${showSettings ? " active" : ""}`}
+            onClick={() => setShowSettings((s) => !s)}
+            title="Colores"
+          >
+            🎨
+          </button>
         </div>
       </aside>
 
+      {showSettings && (
+        <SettingsPanel theme={theme} onThemeChange={setTheme} onClose={() => setShowSettings(false)} />
+      )}
+
       <main className="main-area">
-        {serverInfo?.available && (
-          <div style={{ position: "fixed", top: 8, right: 8, zIndex: 100, background: "rgba(0,0,0,0.7)", borderRadius: 8, padding: "4px 10px", fontSize: "0.65rem", display: "flex", alignItems: "center", gap: 8 }}>
-            <span>📡 {serverInfo.url}</span>
-          </div>
+        {error && (
+          <div className="error-banner" onClick={() => setError(null)}>{error}</div>
         )}
-        {showSettings && <SettingsPanel volume={volume} onChangeVolume={changeVolume} serverInfo={serverInfo} onServerInfoChange={setServerInfo} />}
-        {loading && !currentTrack && <div className="loading"><div className="spinner" /></div>}
+        {currentId && (
+          <NowPlaying
+            title={currentTitle}
+            channel={currentChannel}
+            thumbnail={currentThumb}
+            volume={volume}
+            videoMode={videoMode}
+            videoOpen={videoOpen}
+            onToggleVideo={() => setVideoOpen((v) => !v)}
+            onCloseVideo={() => { if (playerRef.current) playerRef.current.pauseVideo(); setVideoOpen(false); }}
+            onReady={handlePlayerReady}
+            onStateChange={handlePlayerState}
+            onTime={handlePlayerTime}
+            onEnded={handleEnded}
+            onError={handlePlayerError}
+          />
+        )}
+        {loading && !currentId && <div className="loading"><div className="spinner" /></div>}
         <div className="content-scroll" key={activeView + (selectedPlaylist || "") + (channelView?.id || "")}>
           {renderContent()}
         </div>
       </main>
 
-      <audio ref={audioRef} src={currentTrack}
-        onTimeUpdate={handleTimeUpdate}
-        onLoadedMetadata={handleLoadedMeta}
-        onEnded={handleEnded}
-        onError={(e) => addLog("Audio error: " + (e.target?.error?.message || e.type))} />
-
       <Player
-        currentTrack={currentTrack} currentTitle={currentTitle} currentThumb={currentThumb}
+        currentTitle={currentTitle} currentThumb={currentThumb}
         currentId={currentId} playing={playing} loading={loading}
         currentTime={currentTime} duration={duration} volume={volume}
         queueLength={queueIdx >= 0 ? Math.max(0, queue.length - queueIdx - 1) : queue.length}
         onTogglePlay={togglePlay} onSeek={seek} onChangeVolume={changeVolume}
         onPrev={playPrevious} onNext={playNext}
       />
-
-      {showDebug && <DebugPanel logs={logs} onClear={clearDebug} />}
     </div>
   );
 }

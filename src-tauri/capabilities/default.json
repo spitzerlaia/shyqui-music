@@ -6,29 +6,6 @@
     "main"
   ],
   "permissions": [
-    "core:default",
-    "shell:default",
-    "opener:default",
-    "core:path:default",
-    "core:event:default",
-    "core:webview:allow-create-webview",
-    "fs:allow-read-file",
-    "fs:allow-write-file",
-    "fs:allow-exists"
-  ],
-  "scope": {
-    "allow": [
-      { "path": "$APPLOCALDATA/tracks/**" },
-      {
-        "plugin": "shell",
-        "cmd": "binaries/yt-dlp",
-        "sidecar": true
-      },
-      {
-        "plugin": "shell",
-        "cmd": "binaries/ffmpeg",
-        "sidecar": true
-      }
-    ]
-  }
+    "core:default"
+  ]
 }

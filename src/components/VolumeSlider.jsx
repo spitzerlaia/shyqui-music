@@ -1,6 +1,6 @@
 export default function VolumeSlider({ value, onChange, disabled, showPercent, className = "" }) {
   const style = {
-    background: `linear-gradient(to right, #00f5ff 0%, #00f5ff ${value * 100}%, rgba(255,255,255,0.08) ${value * 100}%, rgba(255,255,255,0.08) 100%)`
+    background: `linear-gradient(to right, var(--accent-solid) 0%, var(--accent-solid) ${value * 100}%, rgba(255,255,255,0.08) ${value * 100}%, rgba(255,255,255,0.08) 100%)`
   };
   return (
     <>

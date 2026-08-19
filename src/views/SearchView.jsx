@@ -8,10 +8,6 @@ export default function SearchView({
   query,
   onQueryChange,
   onSearch,
-  source,
-  onSourceChange,
-  hinaiFilters,
-  onHinaiFiltersChange,
   loading,
   results,
   channels,
@@ -21,8 +17,6 @@ export default function SearchView({
   onOpenChannel,
   onBackFromChannel,
   queue,
-  downloadedSongs,
-  downloading,
   saveOpen,
   onSaveToggle,
   playlists,
@@ -30,13 +24,12 @@ export default function SearchView({
   currentId,
   onPlay,
   onQueue,
-  onDownload,
-  showDownload = true,
+  onChannelClick,
 }) {
   return (
     <>
       {!channelView && (
-        <SearchBox value={query} onChange={onQueryChange} onSubmit={onSearch} loading={loading} source={source} onSourceChange={onSourceChange} hinaiFilters={hinaiFilters} onHinaiFiltersChange={onHinaiFiltersChange} />
+        <SearchBox value={query} onChange={onQueryChange} onSubmit={onSearch} loading={loading} />
       )}
 
       {channelView && (
@@ -59,18 +52,16 @@ export default function SearchView({
         <EmptyState message="No videos found" />
       )}
       {channelView && channelVideos.map((item) => (
-        <TrackRow key={item.id} item={item} showSave showQueue showDownload={showDownload}
+        <TrackRow key={item.id} item={item} showSave showQueue
           currentId={currentId}
-          isDownloading={downloading.includes(item.id)}
-          isDownloaded={downloadedSongs.some((s) => s.id === item.id)}
           isQueued={queue.some((q) => q.id === item.id)}
           saveOpen={saveOpen}
           playlists={playlists}
           onPlay={() => onPlay(item)}
           onQueue={onQueue}
-          onDownload={onDownload}
           onSaveToggle={onSaveToggle}
-          onAddToPlaylist={onAddToPlaylist} />
+          onAddToPlaylist={onAddToPlaylist}
+          onChannelClick={onChannelClick} />
       ))}
       {!channelView && channels.length > 0 && (
         <>
@@ -90,18 +81,16 @@ export default function SearchView({
       )}
 
       {!channelView && results.map((item) => (
-        <TrackRow key={item.id} item={item} showSave showQueue showDownload={showDownload}
+        <TrackRow key={item.id} item={item} showSave showQueue
           currentId={currentId}
           isQueued={queue.some((q) => q.id === item.id)}
-          isDownloading={downloading.includes(item.id)}
-          isDownloaded={downloadedSongs.some((s) => s.id === item.id)}
           saveOpen={saveOpen}
           playlists={playlists}
           onPlay={() => onPlay(item)}
           onQueue={onQueue}
-          onDownload={onDownload}
           onSaveToggle={onSaveToggle}
-          onAddToPlaylist={onAddToPlaylist} />
+          onAddToPlaylist={onAddToPlaylist}
+          onChannelClick={onChannelClick} />
       ))}
     </>
   );
