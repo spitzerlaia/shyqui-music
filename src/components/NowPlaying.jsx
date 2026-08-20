@@ -7,6 +7,7 @@ export default function NowPlaying({
   volume,
   videoMode,
   videoOpen,
+  resumeTime,
   onToggleVideo,
   onCloseVideo,
   onReady,
@@ -34,6 +35,7 @@ export default function NowPlaying({
           <VideoPlayer
             videoId={videoMode}
             volume={volume}
+            resumeTime={resumeTime}
             onReady={onReady}
             onStateChange={onStateChange}
             onTime={onTime}

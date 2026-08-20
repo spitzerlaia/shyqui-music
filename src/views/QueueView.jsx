@@ -68,7 +68,7 @@ export default function QueueView({ queue, queueIdx, currentId, currentTitle, cu
       {queue.length === 0 && !currentItem && <EmptyState message="Queue is empty" />}
       {queue.map((item, i) => {
         const isPlayed = isPlayingFromQueue && i < queueIdx;
-        const isCurrent = isPlayingFromQueue && i === queueIdx;
+        const isCurrent = isPlayingFromQueue && i === queueIdx && currentId === item.id;
         return (
           <div key={item.id || i}
             style={{ ...getStyle(i), opacity: isPlayed ? 0.35 : 1, willChange: dragState ? "transform" : "auto" }}>

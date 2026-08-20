@@ -23,7 +23,7 @@ export default function DesktopApp() {
   const [channels, setChannels] = useState([]);
   const [loading, setLoading] = useState(false);
   const [playing, setPlaying] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0);
+  const [currentTime, setCurrentTime] = useLocalStorage("shyqui_current_time", 0);
   const [duration, setDuration] = useState(0);
   const [volume, setVolume] = useLocalStorage("shyqui_volume", 0.7);
   const [currentId, setCurrentId] = useLocalStorage("shyqui_current_id", null);
@@ -42,7 +42,7 @@ export default function DesktopApp() {
   const [channelVideos, setChannelVideos] = useState([]);
   const [channelLoading, setChannelLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [videoMode, setVideoMode] = useState(null);
+  const [videoMode, setVideoMode] = useLocalStorage("shyqui_video_mode", null);
   const [videoOpen, setVideoOpen] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [theme, setTheme] = useLocalStorage(
@@ -392,6 +392,7 @@ export default function DesktopApp() {
             volume={volume}
             videoMode={videoMode}
             videoOpen={videoOpen}
+            resumeTime={currentTime}
             onToggleVideo={() => setVideoOpen((v) => !v)}
             onCloseVideo={() => { if (playerRef.current) playerRef.current.pauseVideo(); setVideoOpen(false); }}
             onReady={handlePlayerReady}

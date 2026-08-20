@@ -19,11 +19,12 @@ function loadYT() {
   return ytApiPromise;
 }
 
-export default function VideoPlayer({ videoId, volume, onReady, onStateChange, onTime, onEnded, onError }) {
+export default function VideoPlayer({ videoId, volume, resumeTime = 0, onReady, onStateChange, onTime, onEnded, onError }) {
   const hostRef = useRef(null);
   const playerRef = useRef(null);
   const videoIdRef = useRef(videoId);
   const volumeRef = useRef(volume);
+  const pendingSeekRef = useRef(typeof resumeTime === "number" && resumeTime > 0.5 ? resumeTime : null);
   const onReadyRef = useRef(onReady);
   const onStateChangeRef = useRef(onStateChange);
   const onTimeRef = useRef(onTime);
@@ -49,6 +50,10 @@ export default function VideoPlayer({ videoId, volume, onReady, onStateChange, o
           onReady: (e) => {
             playerRef.current = e.target;
             e.target.setVolume(Math.round(volumeRef.current * 100));
+            if (typeof pendingSeekRef.current === "number" && pendingSeekRef.current > 0.5) {
+              e.target.seekTo(pendingSeekRef.current, true);
+            }
+            pendingSeekRef.current = null;
             if (onReadyRef.current) onReadyRef.current(e.target);
           },
           onStateChange: (e) => {
@@ -73,6 +78,7 @@ export default function VideoPlayer({ videoId, volume, onReady, onStateChange, o
     const p = playerRef.current;
     if (p && videoId && videoId !== videoIdRef.current) {
       p.loadVideoById(videoId);
+      pendingSeekRef.current = null;
     }
     videoIdRef.current = videoId;
   }, [videoId]);
