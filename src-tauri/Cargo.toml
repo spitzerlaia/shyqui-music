@@ -22,6 +22,6 @@ tauri = { version = "2", features = ["image-png", "image-ico"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
-rusty_ytdl = { version = "0.7", default-features = false, features = ["search", "rustls-tls"] }
+rusty_ytdl = { version = "0.7.4", default-features = false, features = ["search", "rustls-tls"] }
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
 percent-encoding = "2"

@@ -50,6 +50,10 @@ export default function DesktopApp() {
     { ...buildThemeFrom("#ff6fb8", "#22101d"), preset: "rosa" },
     normalizeTheme
   );
+  const [backgroundImage, setBackgroundImage] = useLocalStorage("shyqui_background_image", "");
+  const [backgroundOpacity, setBackgroundOpacity] = useLocalStorage("shyqui_background_opacity", 0);
+  const [backgroundBlur, setBackgroundBlur] = useLocalStorage("shyqui_background_blur", 0);
+  const [backgroundDarkness, setBackgroundDarkness] = useLocalStorage("shyqui_background_darkness", 0);
 
   const playerRef = useRef(null);
   const queueRef = useRef([]);
@@ -57,6 +61,35 @@ export default function DesktopApp() {
 
   useEffect(() => { queueRef.current = queue; }, [queue]);
   useEffect(() => { queueIdxRef.current = queueIdx; }, [queueIdx]);
+
+  const handleBackgroundUpload = (file) => {
+    if (!file || !file.type.startsWith("image/")) return;
+
+    const reader = new FileReader();
+
+    reader.onload = () => {
+      const img = new Image();
+
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        const scale = Math.min(1, 1600 / img.width, 1600 / img.height);
+
+        canvas.width = Math.round(img.width * scale);
+        canvas.height = Math.round(img.height * scale);
+
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+        setBackgroundImage(
+          canvas.toDataURL("image/webp", 0.8)
+        );
+      };
+
+      img.src = reader.result;
+    };
+
+    reader.readAsDataURL(file);
+  };
 
   useEffect(() => {
     const style = document.documentElement.style;
@@ -72,23 +105,37 @@ export default function DesktopApp() {
     style.setProperty("--bg-3", mixHex(theme.bg, "#000000", 30));
     style.setProperty("--on-accent", theme.onAccent);
     style.setProperty("--text-soft", theme.textSoft);
-  }, [theme]);
+    style.setProperty(
+      "--app-bg-image",
+      backgroundImage ? `url("${backgroundImage}")` : "none"
+    );
+
+    style.setProperty("--app-bg-opacity", backgroundOpacity);
+    style.setProperty("--app-bg-blur", `${backgroundBlur}px`);
+    style.setProperty("--app-bg-darkness", backgroundDarkness);
+  }, [
+    theme,
+    backgroundImage,
+    backgroundOpacity,
+    backgroundBlur,
+    backgroundDarkness
+  ]);
 
   const handleSearch = async () => {
-    if (!query) return;
-    setLoading(true); setChannelView(null); setError(null);
+    const input = query.trim();
+    if (!input) return;
+
+    setLoading(true);
+    setChannelView(null);
+    setError(null);
+
     try {
-      const isUrl = /^https?:\/\//.test(query) ||
-        query.includes("youtube.com/") ||
-        query.includes("youtu.be/") ||
-        /^[A-Za-z0-9_-]{11}$/.test(query.trim());
-      if (isUrl) {
-        const [tracks, chans] = await invoke("fetch_url", { url: query });
-        setResults(tracks); setChannels(chans);
-      } else {
-        const [vids, chans] = await invoke("search_youtube", { query });
-        setResults(vids); setChannels(chans);
-      }
+      const response = await invoke("search_youtube", {
+        query: input,
+      });
+
+      setResults(response.videos);
+      setChannels(response.channels);
     } catch (err) {
       console.error(err);
       setError(String(err));
@@ -96,6 +143,7 @@ export default function DesktopApp() {
       setLoading(false);
     }
   };
+
 
   const openChannel = async (ch) => {
     if (!ch || !ch.id) return;
@@ -155,6 +203,11 @@ export default function DesktopApp() {
     });
   };
 
+  const clearQueue = () => {
+    setQueue([]);
+    setQueueIdx(-1);
+  };
+
   const moveQueueItem = (fromIndex, toIndex) => {
     setQueue((prev) => {
       const next = [...prev];
@@ -169,6 +222,21 @@ export default function DesktopApp() {
       if (toIndex <= prev && prev < fromIndex) return prev + 1;
       return prev;
     });
+  };
+
+  const randomizeQueue = () => {
+    setQueue((prev) => {
+      const next = [...prev];
+
+      for (let i = next.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [next[i], next[j]] = [next[j], next[i]];
+      }
+
+      return next;
+    });
+
+    setQueueIdx(-1);
   };
 
   const playFromQueue = (index) => {
@@ -275,8 +343,11 @@ export default function DesktopApp() {
   };
   const importPlaylistUrl = async (playlistId, url) => {
     try {
-      const [tracks] = await invoke("fetch_url", { url });
-      tracks.forEach((track) => addToPlaylist(playlistId, track));
+      const request = await invoke("search_youtube", {
+        query: url,
+      });
+
+      request.videos.forEach((video) => addToPlaylist(playlistId, video));
     } catch (err) {
       console.error(err);
       setError(String(err));
@@ -315,7 +386,27 @@ export default function DesktopApp() {
   const renderContent = () => {
     switch (activeView) {
       case "queue":
-        return <QueueView queue={queue} queueIdx={queueIdx} currentId={currentId} currentTitle={currentTitle} currentThumb={currentThumb} currentTime={currentTime} duration={duration} onPlayFromQueue={playFromQueue} onRemoveFromQueue={removeFromQueue} onMoveQueueItem={moveQueueItem} saveOpen={saveOpen} onSaveToggle={setSaveOpen} playlists={playlists} onAddToPlaylist={addToPlaylist} onChannelClick={handleChannelClick} />;
+        return (
+          <QueueView
+            queue={queue}
+            queueIdx={queueIdx}
+            currentId={currentId}
+            currentTitle={currentTitle}
+            currentThumb={currentThumb}
+            currentTime={currentTime}
+            duration={duration}
+            onPlayFromQueue={playFromQueue}
+            onRemoveFromQueue={removeFromQueue}
+            onClearQueue={clearQueue}
+            onMoveQueueItem={moveQueueItem}
+            onRandomizeQueue={randomizeQueue}
+            saveOpen={saveOpen}
+            onSaveToggle={setSaveOpen}
+            playlists={playlists}
+            onAddToPlaylist={addToPlaylist}
+            onChannelClick={handleChannelClick}
+          />
+        );
       case "history":
         return (
           <HistoryView
@@ -377,7 +468,20 @@ export default function DesktopApp() {
       </aside>
 
       {showSettings && (
-        <SettingsPanel theme={theme} onThemeChange={setTheme} onClose={() => setShowSettings(false)} />
+        <SettingsPanel
+          theme={theme}
+          onThemeChange={setTheme}
+          onClose={() => setShowSettings(false)}
+          backgroundImage={backgroundImage}
+          onBackgroundUpload={handleBackgroundUpload}
+          onBackgroundRemove={() => setBackgroundImage("")}
+          backgroundOpacity={backgroundOpacity}
+          onBackgroundOpacityChange={setBackgroundOpacity}
+          backgroundBlur={backgroundBlur}
+          onBackgroundBlurChange={setBackgroundBlur}
+          backgroundDarkness={backgroundDarkness}
+          onBackgroundDarknessChange={setBackgroundDarkness}
+        />
       )}
 
       <main className="main-area">

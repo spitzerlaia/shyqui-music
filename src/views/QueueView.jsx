@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import EmptyState from "../components/EmptyState";
 import TrackRow from "../components/TrackRow";
 
-export default function QueueView({ queue, queueIdx, currentId, currentTitle, currentThumb, currentTime, duration, onPlayFromQueue, onRemoveFromQueue, onMoveQueueItem, saveOpen, onSaveToggle, playlists, onAddToPlaylist, onChannelClick }) {
+export default function QueueView({ queue, queueIdx, currentId, currentTitle, currentThumb, currentTime, duration, onPlayFromQueue, onRemoveFromQueue, onClearQueue, onMoveQueueItem, onRandomizeQueue, saveOpen, onSaveToggle, playlists, onAddToPlaylist, onChannelClick }) {
   const currentItem = currentId ? { id: currentId, title: currentTitle, thumbnail: currentThumb, duration: currentTime } : null;
   const [dragState, setDragState] = useState(null);
   const dragRef = useRef(null);
@@ -62,6 +62,28 @@ export default function QueueView({ queue, queueIdx, currentId, currentTitle, cu
 
   return (
     <div ref={listRef}>
+      <div className="results-header queue-header">
+        <div className="queue-title">
+          Queue {queue.length > 0 && (
+            <span className="queue-badge">{queue.length}</span>
+          )}
+        </div>
+
+        <div className="queue-actions">
+          {queue.length > 0 && (
+            <button className="btn-clear" onClick={onClearQueue}>
+              <span>Clear</span>
+            </button>
+          )}
+
+          {queue.length > 1 && (
+            <button className="btn-clear" onClick={onRandomizeQueue}>
+              <span>Randomize</span>
+            </button>
+          )}
+        </div>
+      </div>
+      
       {currentId && !isPlayingFromQueue && (
         <TrackRow item={currentItem} isCurrent />
       )}
